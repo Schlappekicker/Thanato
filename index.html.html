@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thanato</title>
+<script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap');
+  :root{
+    --anthrazit:#2B2B2B; --gold:#B8924A; --gold-soft:#DCC493;
+    --creme:#F7F4EF; --weiss:#FFFFFF; --grau:#8A8A8A; --line:#E7E1D4;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--creme);color:var(--anthrazit);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .app{max-width:430px;margin:0 auto;min-height:100vh;background:var(--creme);display:flex;flex-direction:column;}
+  header{padding:22px 20px 18px;text-align:center;border-bottom:1px solid var(--line);}
+  .wordmark{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:30px;letter-spacing:0.08em;}
+  .subtitle{font-size:12.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);font-weight:500;margin-top:4px;}
+
+  .center-box{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;gap:16px;}
+  .login-btn{background:var(--anthrazit);color:var(--gold-soft);border:none;border-radius:10px;padding:14px 28px;font-size:15px;font-weight:600;cursor:pointer;}
+  .login-btn:active{opacity:0.85;}
+  .hint{font-size:13px;color:var(--grau);max-width:280px;}
+  .error-box{background:#F3D9D2;color:#8A3B2A;border-radius:10px;padding:12px 16px;font-size:13px;margin-top:10px;max-width:320px;}
+
+  .tabs{display:flex;gap:8px;padding:14px 20px 0;overflow-x:auto;}
+  .tab-btn{flex-shrink:0;background:var(--weiss);border:1px solid var(--gold-soft);color:var(--anthrazit);font-size:12.5px;font-weight:500;padding:8px 14px;border-radius:20px;cursor:pointer;}
+  .tab-btn.on{background:var(--anthrazit);border-color:var(--anthrazit);color:var(--gold-soft);}
+
+  .list{flex:1;padding:14px 20px 40px;}
+  .section-title{font-size:11.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);font-weight:600;margin:6px 2px 10px;}
+  .case{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:var(--weiss);border:none;border-left:3px solid var(--gold);border-radius:12px;padding:15px 16px;margin-bottom:10px;cursor:pointer;font-family:inherit;box-shadow:0 1px 3px rgba(43,43,43,0.05);}
+  .file-icon{width:38px;height:38px;border-radius:50%;background:var(--creme);border:1px solid var(--gold-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--gold);}
+  .case-info{flex:1;min-width:0;}
+  .case-name{font-size:15.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .case-sub{font-size:12px;color:var(--grau);margin-top:2px;}
+  .empty{padding:50px 10px;text-align:center;color:var(--grau);}
+  .loading{padding:50px 10px;text-align:center;color:var(--grau);font-size:13px;}
+
+  .overlay{position:fixed;inset:0;background:var(--creme);max-width:430px;margin:0 auto;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);overflow-y:auto;z-index:10;}
+  .overlay.open{transform:translateY(0);}
+  .detail-header{padding:20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;background:var(--weiss);}
+  .back{background:var(--creme);border:1px solid var(--gold-soft);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;flex-shrink:0;}
+  .detail-body{padding:20px;}
+  .doc{display:flex;align-items:center;justify-content:space-between;background:var(--weiss);border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:8px;text-decoration:none;color:inherit;}
+  .doc-name{font-size:13.5px;font-weight:500;}
+  .doc-meta{font-size:11px;color:var(--grau);margin-top:2px;}
+  .send-btn{background:var(--anthrazit);color:var(--gold-soft);border:none;border-radius:20px;padding:8px 14px;font-size:12.5px;font-weight:500;flex-shrink:0;}
+  .section-label{font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gold);font-weight:600;margin:22px 0 10px;}
+  .whoami{position:absolute;top:14px;right:16px;font-size:11px;color:var(--grau);}
+
+  .search-wrap{padding:12px 20px 0;}
+  .search-box{display:flex;align-items:center;gap:10px;background:var(--weiss);border:1px solid var(--gold-soft);border-radius:12px;padding:11px 14px;}
+  .search-box input{border:none;outline:none;flex:1;font-family:'Inter',sans-serif;font-size:14.5px;background:transparent;color:var(--anthrazit);}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .chip{display:flex;align-items:center;gap:6px;background:var(--anthrazit);color:var(--gold-soft);font-size:12px;padding:5px 8px 5px 10px;border-radius:20px;}
+  .chip button{background:none;border:none;color:var(--gold-soft);opacity:0.8;cursor:pointer;font-size:13px;padding:0;}
+  .kontakte-btn{margin:12px 20px 0;background:var(--weiss);border:1px solid var(--gold-soft);border-radius:10px;padding:10px 14px;font-size:13px;font-weight:500;color:var(--anthrazit);cursor:pointer;text-align:left;}
+  .refresh-btn{background:none;border:1px solid var(--gold-soft);border-radius:16px;padding:5px 10px;font-size:11px;color:var(--gold);cursor:pointer;flex-shrink:0;}
+  .cat-chip{flex-shrink:0;background:var(--weiss);border:1px solid var(--gold-soft);color:var(--anthrazit);font-size:12px;font-weight:500;padding:7px 13px;border-radius:20px;cursor:pointer;white-space:nowrap;}
+  .cat-chip.on{background:var(--anthrazit);border-color:var(--anthrazit);color:var(--gold-soft);}
+  .contact-card{display:block;width:100%;text-align:left;background:var(--weiss);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+  .contact-name{font-size:15px;font-weight:600;}
+  .contact-kat{font-size:12px;color:var(--gold);margin-top:2px;}
+  .contact-actions{display:flex;gap:8px;margin-top:10px;}
+  .action-btn{flex:1;text-align:center;background:var(--creme);border:1px solid var(--gold-soft);color:var(--anthrazit);font-size:12.5px;font-weight:500;padding:9px 10px;border-radius:8px;text-decoration:none;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="wordmark">THANATO</div>
+    <div class="subtitle">Workflow-Assistent</div>
+  </header>
+
+  <!-- LOGIN-ANSICHT -->
+  <div class="center-box" id="loginView">
+    <p class="hint">Melde dich mit deinem Microsoft-Konto an, um deine echten Sterbefälle aus OneDrive zu sehen.</p>
+    <button class="login-btn" onclick="login()">Mit Microsoft anmelden</button>
+    <div id="errorBox"></div>
+  </div>
+
+  <!-- HAUPTANSICHT (nach Login) -->
+  <div id="mainView" style="display:none; flex-direction:column; flex:1;">
+    <div class="whoami" id="whoami"></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="search-wrap">
+      <div class="search-box">
+        <span>🔍</span>
+        <input id="searchInput" type="text" placeholder="Suchen (Name, Ort, Ansprechpartner …)" />
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+    <button class="kontakte-btn" onclick="openKontakte()">👤 Kontakte (Pfarrer, Einrichtungen)</button>
+    <div class="list" id="list">
+      <div class="loading">Lade Daten aus OneDrive …</div>
+    </div>
+  </div>
+
+  <!-- DETAILANSICHT -->
+  <div class="overlay" id="overlay">
+    <div class="detail-header">
+      <button class="back" onclick="closeDetail()">← Zurück</button>
+      <div class="case-name" id="dName"></div>
+    </div>
+    <div class="detail-body" id="dBody"></div>
+  </div>
+
+  <!-- ANSPRECHPARTNER-DETAILKARTE -->
+  <div class="overlay" id="apOverlay" style="z-index:20;">
+    <div class="detail-header">
+      <button class="back" onclick="closeAnsprechpartner()">← Zurück</button>
+      <div class="case-name">Ansprechpartner</div>
+    </div>
+    <div class="detail-body" id="apBody"></div>
+  </div>
+
+  <!-- KONTAKTE-ANSICHT -->
+  <div class="overlay" id="kontakteOverlay" style="z-index:15;">
+    <div class="detail-header">
+      <button class="back" onclick="closeKontakte()">← Zurück</button>
+      <div class="case-name">Kontakte</div>
+    </div>
+    <div class="detail-body">
+      <div class="chips" id="kontakteFilter"></div>
+      <div id="kontakteList"><div class="loading">Lade Kontakte …</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ====== KONFIGURATION ======
+const msalConfig = {
+  auth: {
+    clientId: "76f92f05-8caa-4f2c-b76c-8e2570e2c143",
+    authority: "https://login.microsoftonline.com/consumers",
+    redirectUri: window.location.origin + window.location.pathname
+  },
+  cache: { cacheLocation: "sessionStorage" }
+};
+const scopes = ["Files.Read", "offline_access", "User.Read"];
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+let accessToken = null;
+let currentYear = new Date().getFullYear();
+let activeTab = null; // wird nach dem Laden gesetzt
+
+// ====== LOGIN ======
+function login(){
+  document.getElementById('errorBox').innerHTML = '';
+  msalInstance.loginRedirect({ scopes });
+}
+
+async function ensureToken(){
+  const account = msalInstance.getActiveAccount();
+  if(!account) throw new Error("nicht angemeldet");
+  try{
+    const r = await msalInstance.acquireTokenSilent({ scopes, account });
+    accessToken = r.accessToken;
+  }catch(e){
+    await msalInstance.acquireTokenRedirect({ scopes });
+  }
+  return accessToken;
+}
+
+function showMain(account){
+  document.getElementById('loginView').style.display = 'none';
+  document.getElementById('mainView').style.display = 'flex';
+  document.getElementById('whoami').textContent = account.username;
+  loadTabs();
+}
+
+// ====== GRAPH-API-HILFSFUNKTION ======
+async function graphGet(path){
+  await ensureToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if(!res.ok){
+    const text = await res.text();
+    throw new Error(`Graph-Fehler ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+function encPath(p){
+  return p.split('/').map(encodeURIComponent).join('/');
+}
+
+// ====== FRAGEB.-DATEN AUS DER EXCEL-DATEI LESEN ======
+// Hinweis: Die Microsoft-Workbook-API unterstützt keine privaten OneDrive-Konten,
+// daher laden wir die Datei herunter und lesen sie lokal im Browser aus.
+async function fetchFileBuffer(itemId){
+  await ensureToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/content`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if(!res.ok) throw new Error(`Download-Fehler ${res.status}`);
+  return res.arrayBuffer();
+}
+
+function excelSerialToDate(serial){
+  // Excel-Datumsursprung: 30.12.1899 (inkl. des bekannten 1900-Schaltjahr-Fehlers)
+  const utcDays = Math.floor(serial - 25569);
+  return new Date(utcDays * 86400 * 1000);
+}
+function formatAsGermanDate(d){
+  if(isNaN(d)) return '';
+  const dd = String(d.getUTCDate()).padStart(2,'0');
+  const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+  return `${dd}.${mm}.${d.getUTCFullYear()}`;
+}
+
+// Wandelt eine gefundene Zelle in ein deutsches Datum um - unabhängig davon,
+// ob die Zelle intern amerikanisch (mm-dd-yy) oder anders formatiert war.
+function dateFromCell(cell){
+  if(!cell || cell.v === undefined || cell.v === null) return '';
+  if(cell.t === 'n') return formatAsGermanDate(excelSerialToDate(cell.v));
+  if(cell.t === 'd') return formatAsGermanDate(new Date(cell.v));
+  return String(cell.v).trim(); // bereits als Text hinterlegtes Datum
+}
+
+function findDateByLabel(sheet, label){
+  if(!sheet['!ref']) return '';
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  for(let r = range.s.r; r <= range.e.r; r++){
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      if(cell && typeof cell.v === 'string' && cell.v.trim() === label){
+        for(let off = 1; off <= 4; off++){
+          const target = sheet[XLSX.utils.encode_cell({r, c: c+off})];
+          const val = dateFromCell(target);
+          if(val && val !== label) return val;
+        }
+      }
+    }
+  }
+  return '';
+}
+
+function formatCell(cell){
+  if(!cell || cell.v === undefined || cell.v === null) return '';
+  // Datumsähnliches Zahlenformat -> selbst ins deutsche Format (TT.MM.JJJJ) umrechnen,
+  // statt sich auf die (manchmal amerikanisch geratene) Formatierung der Bibliothek zu verlassen.
+  if(cell.t === 'n' && cell.z && /[dmy]/i.test(cell.z)){
+    const d = excelSerialToDate(cell.v);
+    if(!isNaN(d)){
+      const dd = String(d.getUTCDate()).padStart(2,'0');
+      const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+      return `${dd}.${mm}.${d.getUTCFullYear()}`;
+    }
+  }
+  if(cell.t === 'n' && cell.w) return String(cell.w).trim();
+  return String(cell.v).trim();
+}
+
+function cellVal(sheet, addr){
+  return formatCell(sheet[addr]);
+}
+
+// Fallback: sucht ein Feld anhand seiner Beschriftung (z.B. "Rufname"), falls die
+// feste Zellposition bei älteren/abweichenden Dateien nicht passt.
+function findByLabel(sheet, label){
+  if(!sheet['!ref']) return '';
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  for(let r = range.s.r; r <= range.e.r; r++){
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      if(cell && typeof cell.v === 'string' && cell.v.trim() === label){
+        for(let off = 1; off <= 4; off++){
+          const val = formatCell(sheet[XLSX.utils.encode_cell({r, c: c+off})]);
+          if(val && val !== label) return val; // Duplikat der Beschriftung selbst ignorieren
+        }
+      }
+    }
+  }
+  return '';
+}
+
+function findRowOfLabel(sheet, label){
+  if(!sheet['!ref']) return -1;
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  for(let r = range.s.r; r <= range.e.r; r++){
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      if(cell && typeof cell.v === 'string' && cell.v.trim() === label) return r;
+    }
+  }
+  return -1;
+}
+
+function findByLabelAfterRow(sheet, label, minRow){
+  if(!sheet['!ref']) return '';
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  for(let r = Math.max(range.s.r, minRow); r <= range.e.r; r++){
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      if(cell && typeof cell.v === 'string' && cell.v.trim() === label){
+        for(let off = 1; off <= 4; off++){
+          const val = formatCell(sheet[XLSX.utils.encode_cell({r, c: c+off})]);
+          if(val && val !== label) return val;
+        }
+      }
+    }
+  }
+  return '';
+}
+
+// Beschriftungen, die selbst keine Suchtreffer sein sollen (nur echte Werte sollen im Index landen)
+const KNOWN_LABELS = new Set([
+  'Anrede','Akad. Titel','Vorname','Rufname','Nachname','Familienname','Geburtsname',
+  'Geb. Datum','Geb. Ort','Straße','Anschrift','Anschrift ','PLZ/ Ort','PLZ/Ort','PLZ    Ort',
+  'Beruf','Konfession','Staatsangehörigkeit','Telefon',' Telefon','E-Mail','E_Mail',
+  'Familienstand','Kind 1','Kind 2','Kind 3','Kind 4','Kind 5','Kind 6','Davon minderjährig:',
+  'Ansprechpartner','Verhältnis des Anzeigenden zum Verstorbenen','Verhältnis des Anzeigenden zum Verstorbenen: ',
+  'Sterbedatum','Todesart','Zu Hause gestorben?','In Einrichtung gestorben?','Todesort','Uhrzeit',
+  'Aufgefunden am','Bestattungsart','Beisetzungsart','Friedhof','Grabnummer','Nutzungsberechtigter',
+  'Pfarrer','Besonderheiten','LV Versicherungsnummer ','Daten für Auftraggeber übernehmen von: ','←'
+]);
+
+// Liest die ganze Datei durch und ordnet jeden gefundenen Wert grob einem Abschnitt zu,
+// damit die Suche wirklich überall greift (Ehepartner, Kinder, Pfarrer, ...).
+// Wie findRowOfLabel, aber nur Spalte A - manche Beschriftungen (z.B. "Familienstand")
+// kommen sowohl als einzelnes Feld als auch als Abschnitts-Überschrift vor; die echte
+// Abschnitts-Überschrift steht bei diesen Vorlagen zuverlässig in Spalte A.
+function findRowOfLabelInColA(sheet, label){
+  if(!sheet['!ref']) return -1;
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  for(let r = range.s.r; r <= range.e.r; r++){
+    const cell = sheet[XLSX.utils.encode_cell({r, c: 0})];
+    if(cell && typeof cell.v === 'string' && cell.v.trim() === label) return r;
+  }
+  return -1;
+}
+
+function buildSearchIndex(sheet){
+  if(!sheet['!ref']) return [];
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const familienstandRow = findRowOfLabelInColA(sheet,'Familienstand');
+  const kindRow = findRowOfLabel(sheet,'Kind 1');
+  const apRow = findRowOfLabel(sheet,'Ansprechpartner');
+  const friedhofRow = findRowOfLabel(sheet,'Friedhof');
+  const einrichtungRow = findRowOfLabel(sheet,'In Einrichtung gestorben?');
+  const pfarrerRow = findRowOfLabel(sheet,'Pfarrer');
+
+  function catForRow(r){
+    if(einrichtungRow >= 0 && r === einrichtungRow) return 'Klinik/Einrichtung';
+    if(pfarrerRow >= 0 && r === pfarrerRow) return 'Pfarrer';
+    if(apRow >= 0 && r >= apRow && (friedhofRow < 0 || r < friedhofRow)) return 'Ansprechpartner/Auftraggeber';
+    if(friedhofRow >= 0 && r >= friedhofRow) return 'Friedhof/Bestattung';
+    if(kindRow >= 0 && r >= kindRow && (apRow < 0 || r < apRow)) return 'Kind/Angehörige';
+    if(familienstandRow >= 0 && r >= familienstandRow && (kindRow < 0 || r < kindRow)) return 'Ehepartner';
+    return 'Verstorbene(r)';
+  }
+
+  const idx = [];
+  const seen = new Set();
+  for(let r = range.s.r; r <= range.e.r; r++){
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      if(!cell) continue;
+      if(typeof cell.v === 'string' && KNOWN_LABELS.has(cell.v.trim())) continue;
+      const val = formatCell(cell);
+      if(!val || val.trim().length < 2) continue;
+      const cat = catForRow(r);
+      const key = cat + '|' + val.toLowerCase();
+      if(seen.has(key)) continue;
+      seen.add(key);
+      idx.push({ cat, text: val });
+    }
+  }
+  return idx;
+}
+
+// Sucht in der Nähe einer Zelle nach dem nächsten gefüllten Wert (rechts daneben) -
+// überspringt dabei Zellen, die selbst nur eine Beschriftung sind (z.B. "Rufname"),
+// damit bei leeren Feldern nicht versehentlich das Label der Nachbarspalte als Wert genommen wird.
+function valueNear(sheet, row, col){
+  for(let off = 1; off <= 3; off++){
+    const cell = sheet[XLSX.utils.encode_cell({ r: row, c: col + off })];
+    if(cell && typeof cell.v === 'string' && KNOWN_LABELS.has(cell.v.trim())) continue;
+    const val = formatCell(cell);
+    if(val) return val;
+  }
+  return '';
+}
+
+// Ein Kind-Datenblock beginnt immer mit dem Feld "Vorname"; die anderen Felder
+// stehen in derselben Spalte in einem festen Zeilenabstand darunter.
+function extractChildAt(sheet, row, col){
+  const vorname = valueNear(sheet, row, col);
+  const nachname = valueNear(sheet, row + 2, col);
+  const strasse = valueNear(sheet, row + 6, col);
+  const plzOrt = valueNear(sheet, row + 8, col);
+  const telefon = valueNear(sheet, row + 10, col);
+  const email = valueNear(sheet, row + 12, col);
+  const name = [vorname, nachname].filter(Boolean).join(' ').trim();
+  // Platzhalter-/Pfeil-Zeichen aus der Vorlage (z.B. "←") sind kein echter Name
+  if(!name || name.length < 2 || !/[a-zA-ZäöüÄÖÜß]/.test(name)) return null;
+  return { name, telefon, email, adresse: [strasse, plzOrt].filter(Boolean).join(', ') };
+}
+
+// Findet alle Kinder-Datenblöcke (können nebeneinander in verschiedenen Spalten stehen)
+function extractChildren(sheet, kindRow, apRow){
+  if(!sheet['!ref'] || kindRow < 0) return [];
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const upperRow = apRow >= 0 ? apRow : kindRow + 60;
+  const children = [];
+  const seen = new Set();
+  for(let r = kindRow; r < upperRow; r++){
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+      if(cell && typeof cell.v === 'string' && cell.v.trim() === 'Vorname'){
+        const child = extractChildAt(sheet, r, c);
+        if(child){
+          const key = child.name.toLowerCase();
+          if(!seen.has(key)){ seen.add(key); children.push(child); }
+        }
+      }
+    }
+  }
+  return children;
+}
+
+async function readFragebData(itemId){
+  if(typeof XLSX === 'undefined') return null;
+  try{
+    const buf = await fetchFileBuffer(itemId);
+    const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+    const sheet = wb.Sheets['Frageb.'];
+    if(!sheet) return null;
+
+    const rufname = findByLabel(sheet,'Rufname') || findByLabel(sheet,'Vorname') || cellVal(sheet,'F8');
+    const familienname = findByLabel(sheet,'Familienname') || findByLabel(sheet,'Nachname') || cellVal(sheet,'C10');
+    let bestattungsart = findByLabel(sheet,'Bestattungsart') || cellVal(sheet,'C139');
+    const result = {
+      name: (rufname + ' ' + familienname).trim(),
+      geburtsdatum: findDateByLabel(sheet,'Geb. Datum') || cellVal(sheet,'C12'),
+      sterbedatum: findDateByLabel(sheet,'Sterbedatum') || cellVal(sheet,'C40'),
+      todesart: findByLabel(sheet,'Todesart') || cellVal(sheet,'F40'),
+      bestattungsart,
+      bestattungTyp: bestattungsart.toLowerCase().includes('erd') ? 'erd'
+                    : bestattungsart.toLowerCase().includes('feuer') ? 'feuer' : '',
+      beisetzungsart: findByLabel(sheet,'Beisetzungsart') || cellVal(sheet,'C143'),
+      friedhofOrt: cellVal(sheet,'F147'),
+      grabnummer: findByLabel(sheet,'Grabnummer') || cellVal(sheet,'C157'),
+      einrichtung: findByLabel(sheet,'In Einrichtung gestorben?'),
+      todesort: findByLabel(sheet,'Todesort'),
+      ansprechpartner: '', telefon: '', email: '', apAnrede: '', apVerhaeltnis: '', apAdresse: '',
+      kinder: []
+    };
+    const kindRow = findRowOfLabel(sheet, 'Kind 1');
+    const apRow = findRowOfLabel(sheet, 'Ansprechpartner');
+    result.kinder = extractChildren(sheet, kindRow, apRow);
+    if(apRow >= 0){
+      const apVorname = findByLabelAfterRow(sheet,'Rufname',apRow) || findByLabelAfterRow(sheet,'Vorname',apRow);
+      const apNachname = findByLabelAfterRow(sheet,'Familienname',apRow) || findByLabelAfterRow(sheet,'Nachname',apRow);
+      result.ansprechpartner = [apVorname, apNachname].filter(Boolean).join(' ');
+      result.telefon = findByLabelAfterRow(sheet,'Telefon',apRow) || findByLabelAfterRow(sheet,' Telefon',apRow);
+      result.email = findByLabelAfterRow(sheet,'E-Mail',apRow) || findByLabelAfterRow(sheet,'E_Mail',apRow);
+      result.apAnrede = findByLabelAfterRow(sheet,'Anrede',apRow);
+      result.apVerhaeltnis = findByLabelAfterRow(sheet,'Verhältnis des Anzeigenden zum Verstorbenen:',apRow)
+                            || findByLabelAfterRow(sheet,'Verhältnis des Anzeigenden zum Verstorbenen',apRow);
+      const strasse = findByLabelAfterRow(sheet,'Anschrift',apRow) || findByLabelAfterRow(sheet,'Anschrift ',apRow);
+      const plzOrt = findByLabelAfterRow(sheet,'PLZ/ Ort',apRow) || findByLabelAfterRow(sheet,'PLZ/Ort',apRow);
+      result.apAdresse = [strasse, plzOrt].filter(Boolean).join(', ');
+    }
+    result.searchIndex = buildSearchIndex(sheet);
+    return result;
+  }catch(err){
+    console.warn('Konnte Frageb.-Daten nicht lesen für', itemId, err);
+    return null;
+  }
+}
+
+
+// ====== TABS & DATEN LADEN ======
+async function loadTabs(){
+  const list = document.getElementById('list');
+  list.innerHTML = '<div class="loading">Lade Ordnerstruktur …</div>';
+  try{
+    const data = await graphGet(`/me/drive/root:/${encPath('Sterbefälle')}:/children`);
+    const folders = (data.value || []).filter(f => f.folder);
+    const tabsEl = document.getElementById('tabs');
+    tabsEl.innerHTML = '';
+    // Aktiver Jahresordner zuerst, dann Vorsorgen, dann ältere Jahre
+    const activeYearName = `Sterbefälle ${currentYear}`;
+    const sorted = folders.slice().sort((a,b) => {
+      if(a.name === activeYearName) return -1;
+      if(b.name === activeYearName) return 1;
+      if(a.name === 'Vorsorgen') return -1;
+      if(b.name === 'Vorsorgen') return 1;
+      return b.name.localeCompare(a.name);
+    });
+    sorted.forEach((f,i) => {
+      const btn = document.createElement('button');
+      btn.className = 'tab-btn' + (i===0 ? ' on' : '');
+      btn.textContent = f.name.replace('Sterbefälle ', '');
+      btn.onclick = () => selectTab(f.name, btn);
+      tabsEl.appendChild(btn);
+    });
+    if(sorted.length){
+      activeTab = sorted[0].name;
+      loadFiles(activeTab);
+    } else {
+      list.innerHTML = '<div class="empty">Keine Unterordner im "Sterbefälle"-Ordner gefunden.</div>';
+    }
+  }catch(err){
+    list.innerHTML = `<div class="error-box">Konnte OneDrive nicht laden: ${err.message}</div>`;
+  }
+}
+
+function selectTab(name, btnEl){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('on'));
+  btnEl.classList.add('on');
+  activeTab = name;
+  loadFiles(name);
+}
+
+// ====== ZWISCHENSPEICHER (localStorage) ======
+// Archiv-Jahre und Vorsorgen ändern sich praktisch nie -> einmal lesen, dann merken.
+// Der aktuelle Jahresordner wird immer per Änderungsdatum abgeglichen.
+const CACHE_KEY = 'thanato_cache_v1';
+function loadDiskCache(){
+  try{ return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }catch(e){ return {}; }
+}
+function saveDiskCache(cache){
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); }catch(e){ /* Speicher voll o.ä. - einfach ignorieren */ }
+}
+let diskCache = loadDiskCache();
+
+async function loadFiles(folderName){
+  const list = document.getElementById('list');
+  list.innerHTML = '<div class="loading">Lade Dateiliste …</div>';
+  try{
+    const data = await graphGet(`/me/drive/root:/${encPath('Sterbefälle/' + folderName)}:/children`);
+    const files = (data.value || []).filter(f => f.file && /\.xlsm?$/i.test(f.name));
+    if(files.length) anyFileId = files[0].id;
+
+    // Kein Massen-Download mehr: nur anzeigen, was schon im Zwischenspeicher steht.
+    // Details werden erst geladen, wenn ein Fall tatsächlich angetippt wird.
+    const enriched = files.map(f => {
+      const cached = diskCache[f.id];
+      const stillFresh = cached && (
+        folderName !== `Sterbefälle ${currentYear}` || cached.lastModifiedDateTime === f.lastModifiedDateTime
+      );
+      return { file: f, info: stillFresh ? cached.info : null };
+    });
+
+    fileCache = {};
+    currentEnriched = enriched;
+    searchTerms = [];
+    document.getElementById('searchInput').value = '';
+    renderChips();
+    renderCaseList(folderName, enriched);
+  }catch(err){
+    list.innerHTML = `<div class="error-box">Fehler beim Laden: ${err.message}</div>`;
+  }
+}
+
+let currentEnriched = [];
+let searchTerms = [];
+let anyFileId = null;
+let kontakteCache = null;
+let kontakteKatFilter = 'Alle';
+
+async function openKontakte(){
+  document.getElementById('kontakteOverlay').classList.add('open');
+  if(kontakteCache){ renderKontakte(); return; }
+  const listEl = document.getElementById('kontakteList');
+  listEl.innerHTML = '<div class="loading">Lade Kontakte …</div>';
+  try{
+    if(!anyFileId) throw new Error('Noch keine Datei geladen, aus der Kontakte gelesen werden können.');
+    const buf = await fetchFileBuffer(anyFileId);
+    const wb = XLSX.read(buf, { type: 'array' });
+    const result = [];
+
+    if(wb.Sheets['Pfarrerliste']){
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets['Pfarrerliste'], { header:1, range:1 });
+      rows.forEach(r => {
+        if(!r || !r[2]) return;
+        result.push({
+          kat:'Pfarrer',
+          name: [r[1], r[2]].filter(Boolean).join(' '),
+          ort: r[4] || '',
+          telefon: r[5] ? String(r[5]) : '',
+          email: r[9] || '',
+          adresse: ''
+        });
+      });
+    }
+    if(wb.Sheets['Einrichtungen']){
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets['Einrichtungen'], { header:1, range:5 });
+      rows.forEach(r => {
+        if(!r || !r[1]) return;
+        result.push({
+          kat:'Einrichtung',
+          name: r[1],
+          ort: r[4] || '',
+          telefon:'',
+          email:'',
+          adresse: [r[2], r[3], r[4]].filter(Boolean).join(', ')
+        });
+      });
+    }
+    kontakteCache = result;
+  }catch(err){
+    listEl.innerHTML = `<div class="error-box">Kontakte konnten nicht geladen werden: ${err.message}</div>`;
+    return;
+  }
+  renderKontakte();
+}
+
+function renderKontakte(){
+  const cats = ['Alle', ...new Set(kontakteCache.map(k => k.kat))];
+  document.getElementById('kontakteFilter').innerHTML = cats.map(c => `
+    <button class="cat-chip ${c===kontakteKatFilter?'on':''}" onclick="setKontakteFilter('${c}')">${c}</button>
+  `).join('');
+  const filtered = kontakteCache.filter(k => kontakteKatFilter==='Alle' || k.kat===kontakteKatFilter);
+  const listEl = document.getElementById('kontakteList');
+  listEl.innerHTML = filtered.length ? filtered.map(k => `
+    <div class="contact-card">
+      <div class="contact-name">${k.name}</div>
+      <div class="contact-kat">${k.kat}${k.ort ? ' · '+k.ort : ''}</div>
+      <div class="contact-actions">
+        ${k.telefon ? `<a class="action-btn" href="tel:${k.telefon.replace(/[^\d+]/g,'')}">📞 Anrufen</a>` : ''}
+        ${k.email ? `<a class="action-btn" href="mailto:${k.email}">✉️ Mail</a>` : ''}
+        ${k.adresse ? `<a class="action-btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(k.adresse)}">📍 Route</a>` : ''}
+      </div>
+    </div>
+  `).join('') : '<div class="empty">Keine Kontakte gefunden.</div>';
+}
+function setKontakteFilter(c){ kontakteKatFilter = c; renderKontakte(); }
+function openAnsprechpartner(itemId){
+  const cached = fileCache[itemId];
+  if(!cached || !cached.info) return;
+  const info = cached.info;
+  const nameZeile = [info.apAnrede, info.ansprechpartner].filter(Boolean).join(' ');
+  openPersonCard({
+    name: nameZeile,
+    verhaeltnis: info.apVerhaeltnis,
+    adresse: info.apAdresse,
+    telefon: info.telefon,
+    email: info.email
+  });
+}
+
+function openKindDetail(itemId, index){
+  const cached = fileCache[itemId];
+  if(!cached || !cached.info || !cached.info.kinder[index]) return;
+  const kind = cached.info.kinder[index];
+  openPersonCard({
+    name: kind.name,
+    verhaeltnis: 'Kind',
+    adresse: kind.adresse,
+    telefon: kind.telefon,
+    email: kind.email
+  });
+}
+
+function openPersonCard(person){
+  const body = document.getElementById('apBody');
+  body.innerHTML = `
+    <div class="doc" style="cursor:default;">
+      <div><div class="doc-name">Name</div><div class="doc-meta">${person.name || '–'}</div></div>
+    </div>
+    ${person.verhaeltnis ? `
+      <div class="doc" style="cursor:default;">
+        <div><div class="doc-name">Verhältnis zum Verstorbenen</div><div class="doc-meta">${person.verhaeltnis}</div></div>
+      </div>
+    ` : ''}
+    ${person.adresse ? `
+      <a class="doc" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(person.adresse)}">
+        <div><div class="doc-name">Adresse</div><div class="doc-meta">${person.adresse}</div></div>
+        <span class="send-btn">📍 Route</span>
+      </a>
+    ` : ''}
+    ${person.telefon ? `
+      <a class="doc" href="tel:${person.telefon.replace(/[^\d+]/g,'')}">
+        <div><div class="doc-name">Telefon</div><div class="doc-meta">${person.telefon}</div></div>
+        <span class="send-btn">📞 Anrufen</span>
+      </a>
+    ` : ''}
+    ${person.email ? `
+      <a class="doc" href="mailto:${person.email}">
+        <div><div class="doc-name">E-Mail</div><div class="doc-meta">${person.email}</div></div>
+        <span class="send-btn">✉️ Schreiben</span>
+      </a>
+    ` : ''}
+    ${(!person.telefon && !person.email) ? '<div class="empty" style="padding:15px 0;">Keine Telefonnummer oder E-Mail-Adresse hinterlegt.</div>' : ''}
+  `;
+  document.getElementById('apOverlay').classList.add('open');
+}
+function closeAnsprechpartner(){
+  document.getElementById('apOverlay').classList.remove('open');
+}
+function closeKontakte(){ document.getElementById('kontakteOverlay').classList.remove('open'); }
+
+function matchesSearch(info, baseName){
+  if(searchTerms.length === 0) return true;
+  const curated = [
+    info?.name, baseName, info?.ansprechpartner, info?.apAdresse, info?.apVerhaeltnis, info?.friedhofOrt,
+    info?.bestattungsart, info?.beisetzungsart, info?.sterbedatum, info?.einrichtung, info?.todesort
+  ].filter(Boolean).join(' ');
+  const indexText = (info?.searchIndex || []).map(e => e.text).join(' ');
+  const hay = (curated + ' ' + indexText).toLowerCase();
+  return searchTerms.every(t => hay.includes(t.toLowerCase()));
+}
+
+// Bestimmt, in welchem "Bereich" ein Fall zu den Suchbegriffen passt, für die gruppierte Anzeige.
+function matchCategory(info, baseName){
+  if(!info) return 'Name/Datei (noch ungelesen)';
+  const anyTermIn = (field) => field && searchTerms.some(t => field.toLowerCase().includes(t.toLowerCase()));
+  if(anyTermIn(info.einrichtung)){
+    const isKlinik = /klinik|krankenhaus|kkh|hospital|krankenh\.?/i.test(info.einrichtung);
+    return isKlinik ? 'Klinik' : 'Einrichtung';
+  }
+  if(anyTermIn(info.ansprechpartner) || anyTermIn(info.apAdresse) || anyTermIn(info.apVerhaeltnis)) return 'Ansprechpartner/Auftraggeber';
+  if(anyTermIn(info.friedhofOrt)) return 'Friedhof';
+  if(anyTermIn(info.name) || anyTermIn(baseName)) return 'Name (Verstorbene/r)';
+  // Restliche Treffer im Volltext-Index nachschlagen (Ehepartner, Kind, Pfarrer, ...)
+  const entry = (info.searchIndex || []).find(e => searchTerms.some(t => e.text.toLowerCase().includes(t.toLowerCase())));
+  if(entry) return entry.cat;
+  return 'Sonstige Treffer';
+}
+
+function renderChips(){
+  const chips = document.getElementById('chips');
+  chips.innerHTML = searchTerms.map(t => `
+    <div class="chip">${t}<button onclick="removeSearchTerm('${t.replace(/'/g,"\\'")}')">✕</button></div>
+  `).join('');
+}
+function removeSearchTerm(t){
+  searchTerms = searchTerms.filter(x => x !== t);
+  resultCatFilter = 'Alle';
+  renderChips();
+  renderCaseList(activeTab, currentEnriched);
+}
+
+document.getElementById('searchInput')?.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && e.target.value.trim()){
+    searchTerms.push(e.target.value.trim());
+    resultCatFilter = 'Alle';
+    e.target.value = '';
+    renderChips();
+    renderCaseList(activeTab, currentEnriched);
+    deepSearchCurrentFolder();
+  }
+});
+
+// Lädt im Hintergrund gezielt die noch nicht gelesenen Dateien des aktuellen Ordners nach,
+// damit die Suche auch nach echten Namen/Ansprechpartnern (nicht nur Dateinamen) treffen kann.
+let isDeepSearching = false;
+async function deepSearchCurrentFolder(){
+  if(isDeepSearching || searchTerms.length === 0) return;
+  const missing = currentEnriched.filter(e => !e.info);
+  if(!missing.length) return;
+  isDeepSearching = true;
+  const progressEl = document.createElement('div');
+  progressEl.className = 'loading';
+  progressEl.id = 'deepSearchProgress';
+  document.getElementById('list').appendChild(progressEl);
+
+  let done = 0;
+  const updateProgress = () => {
+    const el = document.getElementById('deepSearchProgress');
+    if(el) el.textContent = `Durchsuche weitere Fälle … (${done}/${missing.length})`;
+  };
+  updateProgress();
+
+  const CONCURRENCY = 4;
+  let idx = 0;
+  async function worker(){
+    while(idx < missing.length){
+      const entry = missing[idx++];
+      if(!entry.info){ // evtl. inzwischen durch anderen Worker/Öffnen schon gesetzt
+        const info = await readFragebData(entry.file.id);
+        entry.info = info;
+        diskCache[entry.file.id] = { lastModifiedDateTime: entry.file.lastModifiedDateTime, info };
+      }
+      done++;
+      if(searchTerms.length > 0) renderCaseList(activeTab, currentEnriched);
+      document.getElementById('list').appendChild(progressEl);
+      updateProgress();
+    }
+  }
+  await Promise.all(Array.from({length: CONCURRENCY}, worker));
+  saveDiskCache(diskCache);
+  document.getElementById('deepSearchProgress')?.remove();
+  isDeepSearching = false;
+}
+
+let resultCatFilter = 'Alle';
+
+function renderCaseList(folderName, enriched){
+  const list = document.getElementById('list');
+  const filtered = enriched.filter(({file, info}) => matchesSearch(info, file.name.replace(/\.xlsm?$/i,'')));
+  list.innerHTML = `
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>${folderName} (${filtered.length}${filtered.length!==enriched.length ? ' von '+enriched.length : ''})</span>
+      <button class="refresh-btn" onclick="loadFiles('${folderName.replace(/'/g,"\\'")}')">🔄 Liste neu laden</button>
+    </div>`;
+  if(!filtered.length){
+    list.innerHTML += '<div class="empty">Keine Treffer.</div>';
+    return;
+  }
+  fileCache = {};
+
+  function renderCard(file, info){
+    const baseName = file.name.replace(/\.xlsm?$/i, '');
+    const displayName = (info && info.name) ? info.name : baseName;
+    fileCache[file.id] = { file, info, baseName, displayName };
+
+    const sub = info
+      ? [info.sterbedatum, info.ansprechpartner].filter(Boolean).join(' · ')
+      : `Zuletzt geändert: ${new Date(file.lastModifiedDateTime).toLocaleDateString('de-DE')}`;
+
+    const btn = document.createElement('button');
+    btn.className = 'case';
+    btn.onclick = () => openDetail(file.id);
+    btn.innerHTML = `
+      <div class="file-icon">📄</div>
+      <div class="case-info">
+        <div class="case-name">${displayName}</div>
+        <div class="case-sub">${sub}</div>
+      </div>
+    `;
+    list.appendChild(btn);
+  }
+
+  if(searchTerms.length === 0){
+    resultCatFilter = 'Alle';
+    filtered.forEach(({file, info}) => renderCard(file, info));
+    return;
+  }
+
+  // Bei aktiver Suche: nach Fundstelle gruppieren und als Filter-Buttons anbieten
+  const withCat = filtered.map(({file, info}) => ({
+    file, info, cat: matchCategory(info, file.name.replace(/\.xlsm?$/i,''))
+  }));
+  const order = ['Name (Verstorbene/r)','Ansprechpartner/Auftraggeber','Ehepartner','Kind/Angehörige','Pfarrer','Klinik','Einrichtung','Friedhof/Bestattung','Friedhof','Sonstige Treffer','Name/Datei (noch ungelesen)'];
+  const counts = {};
+  withCat.forEach(({cat}) => counts[cat] = (counts[cat]||0) + 1);
+  const catsPresent = order.filter(c => counts[c]);
+
+  if(!catsPresent.includes(resultCatFilter)) resultCatFilter = 'Alle';
+
+  const filterRow = document.createElement('div');
+  filterRow.className = 'chips';
+  filterRow.style.padding = '4px 0 12px';
+  filterRow.innerHTML = `
+    <button class="cat-chip ${resultCatFilter==='Alle'?'on':''}" onclick="setResultFilter('Alle')">Alle (${withCat.length})</button>
+    ${catsPresent.map(c => `<button class="cat-chip ${resultCatFilter===c?'on':''}" onclick="setResultFilter('${c.replace(/'/g,"\\'")}')">${c} (${counts[c]})</button>`).join('')}
+  `;
+  list.appendChild(filterRow);
+
+  const toShow = resultCatFilter === 'Alle' ? withCat : withCat.filter(x => x.cat === resultCatFilter);
+  toShow.forEach(({file, info}) => renderCard(file, info));
+}
+
+function setResultFilter(cat){
+  resultCatFilter = cat;
+  renderCaseList(activeTab, currentEnriched);
+}
+
+let fileCache = {};
+
+// ====== DETAILANSICHT MIT ECHTEN FALLDATEN UND DOKUMENTEN ======
+async function openDetail(itemId){
+  let cached = fileCache[itemId];
+  if(!cached) return;
+  let { file, info, baseName, displayName } = cached;
+
+  document.getElementById('dName').textContent = displayName;
+  const body = document.getElementById('dBody');
+  document.getElementById('overlay').classList.add('open');
+
+  // Falls die Falldaten noch nicht geladen wurden (Liste zeigt nur Dateinamen),
+  // jetzt gezielt nur für diesen einen Fall nachladen.
+  if(!info){
+    body.innerHTML = '<div class="loading">Lade Falldaten …</div>';
+    info = await readFragebData(file.id);
+    diskCache[file.id] = { lastModifiedDateTime: file.lastModifiedDateTime, info };
+    saveDiskCache(diskCache);
+    displayName = (info && info.name) ? info.name : baseName;
+    document.getElementById('dName').textContent = displayName;
+    fileCache[itemId] = { file, info, baseName, displayName };
+    // Auch den Eintrag in der Liste aktualisieren, damit er beim Zurückgehen sofort stimmt
+    const entry = currentEnriched.find(e => e.file.id === itemId);
+    if(entry) entry.info = info;
+  }
+
+  let fieldsHtml = '';
+  let apHtml = '';
+  let kinderHtml = '';
+  if(info){
+    if(info.ansprechpartner || info.telefon || info.email){
+      apHtml = `
+        <div class="section-label">Ansprechpartner</div>
+        <button class="doc" onclick="openAnsprechpartner('${itemId}')" style="width:100%;text-align:left;border:1px solid var(--gold-soft);">
+          <div><div class="doc-name">${info.ansprechpartner || 'Ansprechpartner'}</div><div class="doc-meta">Kontaktdaten ansehen</div></div>
+          <span class="send-btn">Öffnen</span>
+        </button>
+      `;
+    }
+    if(info.kinder && info.kinder.length){
+      kinderHtml = `
+        <div class="section-label">Kinder</div>
+        ${info.kinder.map((k,i) => `
+          <button class="doc" onclick="openKindDetail('${itemId}', ${i})" style="width:100%;text-align:left;border:1px solid var(--line);">
+            <div><div class="doc-name">${k.name}</div><div class="doc-meta">Kontaktdaten ansehen</div></div>
+            <span class="send-btn">Öffnen</span>
+          </button>
+        `).join('')}
+      `;
+    }
+    const rows = [
+      ['Sterbedatum', info.sterbedatum],
+      ['Todesart', info.todesart],
+      ['Klinik/Einrichtung', info.einrichtung],
+      ['Bestattungsart', info.bestattungsart],
+      ['Beisetzungsart', info.beisetzungsart],
+      ['Friedhof (Ort)', info.friedhofOrt],
+      ['Grabnummer', info.grabnummer]
+    ].filter(([,v]) => v);
+    fieldsHtml = rows.map(([l,v]) => `
+      <div class="doc" style="cursor:default;">
+        <div><div class="doc-name">${l}</div><div class="doc-meta">${v}</div></div>
+      </div>
+    `).join('');
+  } else {
+    fieldsHtml = '<div class="empty" style="padding:10px 0;">Konnte die Falldaten aus "Frageb." nicht lesen (evtl. abweichende Struktur dieser Datei).</div>';
+  }
+
+  body.innerHTML = `
+    ${apHtml}
+    ${kinderHtml}
+    ${fieldsHtml}
+    <a class="doc" href="${file.webUrl}" target="_blank" rel="noopener">
+      <div><div class="doc-name">Excel-Datei öffnen</div><div class="doc-meta">${file.name}</div></div>
+      <span class="send-btn">Öffnen</span>
+    </a>
+    <div class="section-label">Unterlagen (Scan-Ordner)</div>
+    <div id="scanDocs" class="loading">Lade Dokumente …</div>
+  `;
+
+  try{
+    const scanData = await graphGet(`/me/drive/root:/Scan:/children`);
+    const match = (scanData.value || []).find(f => f.folder && f.name.toLowerCase().includes(baseName.toLowerCase()));
+    const scanBox = document.getElementById('scanDocs');
+    if(match){
+      const docsData = await graphGet(`/me/drive/items/${match.id}/children`);
+      const docs = docsData.value || [];
+      scanBox.outerHTML = docs.length ? docs.map(d => `
+        <a class="doc" href="${d.webUrl}" target="_blank" rel="noopener">
+          <div><div class="doc-name">${d.name}</div><div class="doc-meta">${(d.size/1024).toFixed(0)} KB</div></div>
+          <span class="send-btn">Öffnen</span>
+        </a>
+      `).join('') : '<div class="empty" style="padding:20px 0;">Ordner ist leer.</div>';
+    } else {
+      scanBox.outerHTML = `<div class="empty" style="padding:20px 0;">Kein passender Unterlagen-Ordner ("Unterlagen ${baseName}") gefunden.</div>`;
+    }
+  }catch(err){
+    document.getElementById('scanDocs').outerHTML = `<div class="error-box">Scan-Ordner konnte nicht geladen werden: ${err.message}</div>`;
+  }
+}
+
+function closeDetail(){
+  document.getElementById('overlay').classList.remove('open');
+}
+
+// ====== BEIM START PRÜFEN, OB SCHON ANGEMELDET / GERADE ZURÜCKGELEITET ======
+window.addEventListener('load', async () => {
+  if(typeof msalInstance.initialize === 'function'){
+    await msalInstance.initialize();
+  }
+  try{
+    const response = await msalInstance.handleRedirectPromise();
+    if(response && response.account){
+      msalInstance.setActiveAccount(response.account);
+      accessToken = response.accessToken;
+      showMain(response.account);
+      return;
+    }
+  }catch(err){
+    document.getElementById('errorBox').innerHTML =
+      `<div class="error-box">Anmeldung fehlgeschlagen: ${err.message || err}</div>`;
+  }
+  const accounts = msalInstance.getAllAccounts();
+  if(accounts.length > 0){
+    msalInstance.setActiveAccount(accounts[0]);
+    showMain(accounts[0]);
+  }
+});
+</script>
+
+</body>
+</html>
