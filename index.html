@@ -179,6 +179,8 @@
       <input id="kfName" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
       <label style="font-size:12.5px;color:var(--grau);">Ort</label>
       <input id="kfOrt" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
+      <label style="font-size:12.5px;color:var(--grau);">Konfession</label>
+      <input id="kfKonfession" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
       <label style="font-size:12.5px;color:var(--grau);">Telefonnummern</label>
       <div id="kfTelefonListe" style="margin:6px 0 6px;"></div>
       <button type="button" style="background:none;border:1px dashed var(--gold-soft);border-radius:10px;padding:9px 14px;font-size:13px;color:var(--anthrazit);cursor:pointer;width:100%;margin-bottom:14px;" onclick="kfTelefonZeileHinzufuegen()">➕ Weitere Telefonnummer</button>
@@ -822,7 +824,8 @@ async function openKontakte(){
             ort: r[4] || '',
             telefone: r[5] ? [{ nummer: String(r[5]), notiz: '' }] : [],
             email: r[9] || '',
-            adresse: ''
+            adresse: '',
+            konfession: r[7] || ''
           });
         });
       }
@@ -838,7 +841,8 @@ async function openKontakte(){
             ort: r[4] || '',
             telefone: [],
             email:'',
-            adresse: [r[2], r[3], r[4]].filter(Boolean).join(', ')
+            adresse: [r[2], r[3], r[4]].filter(Boolean).join(', '),
+            konfession: ''
           });
         });
       }
@@ -874,6 +878,7 @@ function renderKontakte(){
         <div>
           <div class="contact-name">${k.name}</div>
           <div class="contact-kat">${k.kat}${k.ort ? ' · '+k.ort : ''}</div>
+          ${k.konfession ? `<div style="font-size:12px;color:var(--gold);margin-top:2px;">${k.konfession}</div>` : ''}
         </div>
         ${notizBtnHtml('kontakt-'+k.id, k.name)}
       </div>
@@ -910,6 +915,7 @@ function openKontaktForm(id){
   document.getElementById('kfKat').value = k ? k.kat : 'Sonstiges';
   document.getElementById('kfName').value = k ? k.name : '';
   document.getElementById('kfOrt').value = k ? k.ort : '';
+  document.getElementById('kfKonfession').value = k ? (k.konfession||'') : '';
   document.getElementById('kfEmail').value = k ? k.email : '';
   document.getElementById('kfAdresse').value = k ? k.adresse : '';
   document.getElementById('kfDeleteBtn').style.display = k ? 'block' : 'none';
@@ -955,6 +961,7 @@ function saveKontaktForm(){
     kat: document.getElementById('kfKat').value,
     name: document.getElementById('kfName').value.trim(),
     ort: document.getElementById('kfOrt').value.trim(),
+    konfession: document.getElementById('kfKonfession').value.trim(),
     telefone: kfTelefoneSammeln(),
     email: document.getElementById('kfEmail').value.trim(),
     adresse: document.getElementById('kfAdresse').value.trim()
@@ -1010,6 +1017,7 @@ async function teileKontakt(id){
   const k = kontakteCache.find(x => x.id === id);
   if(!k) return;
   const zeilen = [k.name, k.kat + (k.ort ? ' · ' + k.ort : '')];
+  if(k.konfession) zeilen.push('Konfession: ' + k.konfession);
   (k.telefone||[]).forEach(t => zeilen.push('Telefon' + (t.notiz ? ' (' + t.notiz + ')' : '') + ': ' + t.nummer));
   if(k.email) zeilen.push('E-Mail: ' + k.email);
   if(k.adresse) zeilen.push('Adresse: ' + k.adresse);
@@ -1044,7 +1052,7 @@ function kontaktInsTelefon(id){
   });
   if(k.email) zeilen.push('EMAIL:' + k.email);
   if(k.adresse) zeilen.push('ADR;TYPE=WORK:;;' + k.adresse.replace(/,/g, ';') + ';;;');
-  zeilen.push('NOTE:' + k.kat + ' (Thanato)');
+  zeilen.push('NOTE:' + k.kat + (k.konfession ? ' · ' + k.konfession : '') + ' (Thanato)');
   zeilen.push('END:VCARD');
   const vcard = zeilen.join('\r\n');
 
