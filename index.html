@@ -225,7 +225,7 @@ async function openDocInline(itemId, mimeType){
 
 async function openScanDoc(itemId){
   const d = docCache[itemId];
-  const mimeType = (d && d.file && d.file.mimeType) || 'application/pdf';
+  const mimeType = mimeTypeFromFilename(d ? d.name : '') || (d && d.file && d.file.mimeType) || 'application/pdf';
   try{
     await openDocInline(itemId, mimeType);
   }catch(err){
@@ -236,10 +236,29 @@ async function openScanDoc(itemId){
 // Verschickt ein Dokument aus dem Unterlagen-Ordner über die native Teilen-Funktion
 // des Geräts (WhatsApp, Mail, etc.) - lädt die Datei authentifiziert und übergibt sie
 // als File-Objekt an die Web-Share-API.
+// Ermittelt einen zuverlässigen Dateityp anhand der Dateiendung - manche von Microsoft
+// gelieferten Dokumente haben keinen (oder einen zu allgemeinen) Dateityp hinterlegt,
+// wodurch die Teilen-Funktion des Handys die Datei ablehnt und stattdessen nur einen
+// Link versendet.
+function mimeTypeFromFilename(name){
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const map = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    gif: 'image/gif', webp: 'image/webp', heic: 'image/heic',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    txt: 'text/plain'
+  };
+  return map[ext] || null;
+}
+
 async function shareScanDoc(itemId){
   const d = docCache[itemId];
   if(!d) return;
-  const mimeType = (d.file && d.file.mimeType) || 'application/octet-stream';
+  const mimeType = mimeTypeFromFilename(d.name) || (d.file && d.file.mimeType) || 'application/octet-stream';
   try{
     await ensureToken();
     const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/content`, {
@@ -252,10 +271,16 @@ async function shareScanDoc(itemId){
     if(navigator.canShare && navigator.canShare({ files: [file] })){
       await navigator.share({ files: [file], title: d.name });
     } else {
-      // Fallback: Datei öffnen, damit der Nutzer sie von dort aus manuell teilen kann.
-      const url = URL.createObjectURL(file);
-      window.open(url, '_blank');
-      alert('Direktes Versenden wird von diesem Gerät/Browser nicht unterstützt. Die Datei wurde stattdessen geöffnet - von dort kannst du die Teilen-Funktion nutzen.');
+      // Fallback: echten, extern gültigen Link teilen (kein nur lokal gültiger Blob-Link,
+      // der außerhalb dieser App nicht mehr funktionieren würde).
+      const echterLink = d['@microsoft.graph.downloadUrl'] || d.webUrl;
+      if(navigator.share){
+        await navigator.share({ title: d.name, url: echterLink });
+      } else {
+        // Letzter Fallback (z.B. am PC ohne Teilen-Funktion): Link kopieren.
+        await navigator.clipboard.writeText(echterLink);
+        alert('Dieses Gerät unterstützt keine direkte Teilen-Funktion. Der Link zum Dokument wurde stattdessen in die Zwischenablage kopiert - du kannst ihn jetzt in eine Mail/Nachricht einfügen.');
+      }
     }
   }catch(err){
     if(err.name !== 'AbortError'){ // Abbruch durch Nutzer selbst ist kein Fehler
