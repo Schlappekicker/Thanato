@@ -151,6 +151,7 @@ const msalInstance = new msal.PublicClientApplication(msalConfig);
 let accessToken = null;
 let currentYear = new Date().getFullYear();
 let activeTab = null; // wird nach dem Laden gesetzt
+const docCache = {}; // itemId -> Graph-Dokumentobjekt (für den Unterlagen-Scan-Ordner)
 
 // ====== LOGIN ======
 function login(){
@@ -206,8 +207,31 @@ async function fetchFileBuffer(itemId){
   return res.arrayBuffer();
 }
 
+// Öffnet ein Dokument (z.B. PDF) direkt im Browser statt es herunterzuladen -
+// lädt die Bytes authentifiziert und zeigt sie über eine Blob-URL an.
+async function openDocInline(itemId, mimeType){
+  await ensureToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/content`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if(!res.ok) throw new Error(`Download-Fehler ${res.status}`);
+  const blob = await res.blob();
+  const typedBlob = mimeType ? blob.slice(0, blob.size, mimeType) : blob;
+  const url = URL.createObjectURL(typedBlob);
+  window.open(url, '_blank');
+}
+
+async function openScanDoc(itemId){
+  const d = docCache[itemId];
+  const mimeType = (d && d.file && d.file.mimeType) || 'application/pdf';
+  try{
+    await openDocInline(itemId, mimeType);
+  }catch(err){
+    alert('Dokument konnte nicht geöffnet werden: ' + err.message);
+  }
+}
+
 function excelSerialToDate(serial){
-  // Excel-Datumsursprung: 30.12.1899 (inkl. des bekannten 1900-Schaltjahr-Fehlers)
   const utcDays = Math.floor(serial - 25569);
   return new Date(utcDays * 86400 * 1000);
 }
@@ -963,11 +987,12 @@ async function openDetail(itemId){
     if(match){
       const docsData = await graphGet(`/me/drive/items/${match.id}/children`);
       const docs = docsData.value || [];
+      docs.forEach(d => { docCache[d.id] = d; });
       scanBox.outerHTML = docs.length ? docs.map(d => `
-        <a class="doc" href="${d['@microsoft.graph.downloadUrl'] || d.webUrl}" target="_blank" rel="noopener">
+        <button class="doc" style="width:100%;text-align:left;border:1px solid var(--line);" onclick="openScanDoc('${d.id}')">
           <div><div class="doc-name">${d.name}</div><div class="doc-meta">${(d.size/1024).toFixed(0)} KB</div></div>
           <span class="send-btn">Öffnen</span>
-        </a>
+        </button>
       `).join('') : '<div class="empty" style="padding:20px 0;">Ordner ist leer.</div>';
     } else {
       scanBox.outerHTML = `<div class="empty" style="padding:20px 0;">Kein passender Unterlagen-Ordner ("Unterlagen ${folderSearchName}") gefunden.</div>`;
