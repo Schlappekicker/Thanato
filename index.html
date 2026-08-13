@@ -116,7 +116,7 @@
       </div>
       <div class="chips" id="chips"></div>
     </div>
-    <button class="kontakte-btn" onclick="openKontakte()">👤 Kontakte (Pfarrer, Einrichtungen)</button>
+    <button class="kontakte-btn" onclick="openKontakte()">👤 Kontakte (Pfarrer, Einrichtungen, Friedhöfe, Floristen, ...)</button>
     <div class="list" id="list">
       <div class="loading">Lade Daten aus OneDrive …</div>
     </div>
@@ -147,12 +147,44 @@
       <div class="case-name">Kontakte</div>
     </div>
     <div class="detail-body">
+      <button class="kontakte-btn" style="margin:0 0 14px 0;" onclick="openKontaktForm(null)">➕ Neuer Kontakt</button>
       <div class="chips" id="kontakteFilter"></div>
       <div id="kontakteList"><div class="loading">Lade Kontakte …</div></div>
     </div>
   </div>
 
+  <!-- KONTAKT BEARBEITEN/NEU -->
+  <div class="overlay" id="kontaktFormOverlay" style="z-index:16;">
+    <div class="detail-header">
+      <button class="back" onclick="closeKontaktForm()">← Zurück</button>
+      <div class="case-name" id="kontaktFormTitel">Neuer Kontakt</div>
+    </div>
+    <div class="detail-body">
+      <label style="font-size:12.5px;color:var(--grau);">Kategorie</label>
+      <select id="kfKat" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;background:var(--weiss);">
+        <option value="Pfarrer">Pfarrer</option>
+        <option value="Einrichtung">Einrichtung</option>
+        <option value="Friedhof">Friedhof</option>
+        <option value="Florist">Florist</option>
+        <option value="Sonstiges">Sonstiges</option>
+      </select>
+      <label style="font-size:12.5px;color:var(--grau);">Name</label>
+      <input id="kfName" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
+      <label style="font-size:12.5px;color:var(--grau);">Ort</label>
+      <input id="kfOrt" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
+      <label style="font-size:12.5px;color:var(--grau);">Telefon</label>
+      <input id="kfTelefon" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
+      <label style="font-size:12.5px;color:var(--grau);">E-Mail</label>
+      <input id="kfEmail" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
+      <label style="font-size:12.5px;color:var(--grau);">Adresse</label>
+      <input id="kfAdresse" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 20px;font-size:14px;">
+      <button class="kontakte-btn" style="width:100%;text-align:center;background:var(--anthrazit);color:var(--gold-soft);border:none;margin-bottom:10px;" onclick="saveKontaktForm()">Speichern</button>
+      <button id="kfDeleteBtn" class="kontakte-btn" style="width:100%;text-align:center;color:#B23; display:none;" onclick="deleteKontaktForm()">Löschen</button>
+    </div>
+  </div>
+
 </div>
+
 
 <script>
 // ====== KONFIGURATION ======
@@ -670,46 +702,81 @@ let anyFileId = null;
 let kontakteCache = null;
 let kontakteKatFilter = 'Alle';
 
+// ====== LOKALE KONTAKTE & ÜBERSCHREIBUNGEN (localStorage) ======
+// Neue Kategorien (Friedhof, Florist, Sonstiges) sowie Bearbeitungen an
+// Pfarrer-/Einrichtungs-Kontakten aus der Excel-Datei werden lokal auf dem
+// Gerät gespeichert, da die Excel-Datei selbst nicht beschrieben wird.
+function ladeLokaleKontakte(){
+  try{ return JSON.parse(localStorage.getItem('thanato_kontakte_local') || '[]'); }
+  catch(e){ return []; }
+}
+function speichereLokaleKontakte(list){
+  localStorage.setItem('thanato_kontakte_local', JSON.stringify(list));
+}
+function ladeUeberschreibungen(){
+  try{ return JSON.parse(localStorage.getItem('thanato_kontakte_overrides') || '{}'); }
+  catch(e){ return {}; }
+}
+function speichereUeberschreibungen(obj){
+  localStorage.setItem('thanato_kontakte_overrides', JSON.stringify(obj));
+}
+
 async function openKontakte(){
   document.getElementById('kontakteOverlay').classList.add('open');
   if(kontakteCache){ renderKontakte(); return; }
   const listEl = document.getElementById('kontakteList');
   listEl.innerHTML = '<div class="loading">Lade Kontakte …</div>';
   try{
-    if(!anyFileId) throw new Error('Noch keine Datei geladen, aus der Kontakte gelesen werden können.');
-    const buf = await fetchFileBuffer(anyFileId);
-    const wb = XLSX.read(buf, { type: 'array' });
     const result = [];
 
-    if(wb.Sheets['Pfarrerliste']){
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets['Pfarrerliste'], { header:1, range:1 });
-      rows.forEach(r => {
-        if(!r || !r[2]) return;
-        result.push({
-          kat:'Pfarrer',
-          name: [r[1], r[2]].filter(Boolean).join(' '),
-          ort: r[4] || '',
-          telefon: r[5] ? String(r[5]) : '',
-          email: r[9] || '',
-          adresse: ''
+    if(anyFileId){
+      const buf = await fetchFileBuffer(anyFileId);
+      const wb = XLSX.read(buf, { type: 'array' });
+
+      if(wb.Sheets['Pfarrerliste']){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Pfarrerliste'], { header:1, range:1 });
+        rows.forEach((r, i) => {
+          if(!r || !r[2]) return;
+          result.push({
+            id: 'excel-pfarrer-' + i,
+            quelle: 'excel',
+            kat:'Pfarrer',
+            name: [r[1], r[2]].filter(Boolean).join(' '),
+            ort: r[4] || '',
+            telefon: r[5] ? String(r[5]) : '',
+            email: r[9] || '',
+            adresse: ''
+          });
         });
-      });
-    }
-    if(wb.Sheets['Einrichtungen']){
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets['Einrichtungen'], { header:1, range:5 });
-      rows.forEach(r => {
-        if(!r || !r[1]) return;
-        result.push({
-          kat:'Einrichtung',
-          name: r[1],
-          ort: r[4] || '',
-          telefon:'',
-          email:'',
-          adresse: [r[2], r[3], r[4]].filter(Boolean).join(', ')
+      }
+      if(wb.Sheets['Einrichtungen']){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Einrichtungen'], { header:1, range:5 });
+        rows.forEach((r, i) => {
+          if(!r || !r[1]) return;
+          result.push({
+            id: 'excel-einrichtung-' + i,
+            quelle: 'excel',
+            kat:'Einrichtung',
+            name: r[1],
+            ort: r[4] || '',
+            telefon:'',
+            email:'',
+            adresse: [r[2], r[3], r[4]].filter(Boolean).join(', ')
+          });
         });
-      });
+      }
     }
-    kontakteCache = result;
+
+    // Überschreibungen (Bearbeitungen an Excel-Kontakten) anwenden bzw. gelöschte ausblenden
+    const overrides = ladeUeberschreibungen();
+    let merged = result
+      .map(k => overrides[k.id] ? { ...k, ...overrides[k.id] } : k)
+      .filter(k => !(overrides[k.id] && overrides[k.id].geloescht));
+
+    // Lokal angelegte Kontakte (Friedhof, Florist, Sonstiges, etc.) ergänzen
+    merged = merged.concat(ladeLokaleKontakte());
+
+    kontakteCache = merged;
   }catch(err){
     listEl.innerHTML = `<div class="error-box">Kontakte konnten nicht geladen werden: ${err.message}</div>`;
     return;
@@ -733,10 +800,141 @@ function renderKontakte(){
         ${k.email ? `<a class="action-btn" href="mailto:${k.email}">✉️ Mail</a>` : ''}
         ${k.adresse ? `<a class="action-btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(k.adresse)}">📍 Route</a>` : ''}
       </div>
+      <div class="contact-actions" style="margin-top:6px;">
+        <button class="action-btn" style="cursor:pointer;border:none;" onclick="openKontaktForm('${k.id}')">✏️ Bearbeiten</button>
+        <button class="action-btn" style="cursor:pointer;border:none;" onclick="teileKontakt('${k.id}')">↗️ Teilen</button>
+        <button class="action-btn" style="cursor:pointer;border:none;" onclick="kontaktInsTelefon('${k.id}')">📇 Ins Telefon</button>
+      </div>
     </div>
   `).join('') : '<div class="empty">Keine Kontakte gefunden.</div>';
 }
 function setKontakteFilter(c){ kontakteKatFilter = c; renderKontakte(); }
+
+// ====== KONTAKT ANLEGEN / BEARBEITEN / LÖSCHEN / TEILEN ======
+let kfAktuelleId = null;
+
+function openKontaktForm(id){
+  kfAktuelleId = id;
+  const k = id ? kontakteCache.find(x => x.id === id) : null;
+  document.getElementById('kontaktFormTitel').textContent = k ? 'Kontakt bearbeiten' : 'Neuer Kontakt';
+  document.getElementById('kfKat').value = k ? k.kat : 'Sonstiges';
+  document.getElementById('kfName').value = k ? k.name : '';
+  document.getElementById('kfOrt').value = k ? k.ort : '';
+  document.getElementById('kfTelefon').value = k ? k.telefon : '';
+  document.getElementById('kfEmail').value = k ? k.email : '';
+  document.getElementById('kfAdresse').value = k ? k.adresse : '';
+  document.getElementById('kfDeleteBtn').style.display = k ? 'block' : 'none';
+  document.getElementById('kontaktFormOverlay').classList.add('open');
+}
+function closeKontaktForm(){
+  document.getElementById('kontaktFormOverlay').classList.remove('open');
+}
+
+function saveKontaktForm(){
+  const daten = {
+    kat: document.getElementById('kfKat').value,
+    name: document.getElementById('kfName').value.trim(),
+    ort: document.getElementById('kfOrt').value.trim(),
+    telefon: document.getElementById('kfTelefon').value.trim(),
+    email: document.getElementById('kfEmail').value.trim(),
+    adresse: document.getElementById('kfAdresse').value.trim()
+  };
+  if(!daten.name){ alert('Bitte einen Namen eingeben.'); return; }
+
+  const bestehend = kfAktuelleId ? kontakteCache.find(x => x.id === kfAktuelleId) : null;
+
+  if(bestehend && bestehend.quelle === 'excel'){
+    // Bearbeitung eines aus der Excel-Datei stammenden Kontakts -> als Überschreibung speichern
+    const overrides = ladeUeberschreibungen();
+    overrides[bestehend.id] = daten;
+    speichereUeberschreibungen(overrides);
+  } else if(bestehend){
+    // Bearbeitung eines lokal angelegten Kontakts
+    const lokale = ladeLokaleKontakte();
+    const idx = lokale.findIndex(x => x.id === bestehend.id);
+    if(idx > -1) lokale[idx] = { ...lokale[idx], ...daten };
+    speichereLokaleKontakte(lokale);
+  } else {
+    // Neuer, lokal angelegter Kontakt
+    const lokale = ladeLokaleKontakte();
+    lokale.push({ id: 'lokal-' + Date.now(), quelle:'lokal', ...daten });
+    speichereLokaleKontakte(lokale);
+  }
+
+  kontakteCache = null; // beim nächsten Öffnen neu zusammenführen
+  closeKontaktForm();
+  openKontakte();
+}
+
+function deleteKontaktForm(){
+  if(!kfAktuelleId) return;
+  const bestehend = kontakteCache.find(x => x.id === kfAktuelleId);
+  if(!bestehend) return;
+  if(!confirm(`"${bestehend.name}" wirklich löschen?`)) return;
+
+  if(bestehend.quelle === 'excel'){
+    const overrides = ladeUeberschreibungen();
+    overrides[bestehend.id] = { ...(overrides[bestehend.id]||{}), geloescht: true };
+    speichereUeberschreibungen(overrides);
+  } else {
+    const lokale = ladeLokaleKontakte().filter(x => x.id !== bestehend.id);
+    speichereLokaleKontakte(lokale);
+  }
+
+  kontakteCache = null;
+  closeKontaktForm();
+  openKontakte();
+}
+
+async function teileKontakt(id){
+  const k = kontakteCache.find(x => x.id === id);
+  if(!k) return;
+  const zeilen = [k.name, k.kat + (k.ort ? ' · ' + k.ort : '')];
+  if(k.telefon) zeilen.push('Telefon: ' + k.telefon);
+  if(k.email) zeilen.push('E-Mail: ' + k.email);
+  if(k.adresse) zeilen.push('Adresse: ' + k.adresse);
+  const text = zeilen.join('\n');
+
+  try{
+    if(navigator.share){
+      await navigator.share({ title: k.name, text });
+    } else if(navigator.clipboard){
+      await navigator.clipboard.writeText(text);
+      alert('Kontaktdaten wurden in die Zwischenablage kopiert.');
+    }
+  }catch(err){
+    if(err.name !== 'AbortError'){
+      alert('Konnte nicht geteilt werden: ' + err.message);
+    }
+  }
+}
+
+// Erzeugt eine vCard-Datei (.vcf) für den Kontakt und öffnet damit die
+// "Kontakt hinzufügen"-Ansicht des Handys - die App bleibt die Quelle mit
+// ihren eigenen Kategorien, der Kontakt landet zusätzlich im Adressbuch.
+function kontaktInsTelefon(id){
+  const k = kontakteCache.find(x => x.id === id);
+  if(!k) return;
+
+  const zeilen = ['BEGIN:VCARD', 'VERSION:3.0', 'FN:' + k.name];
+  if(k.telefon) zeilen.push('TEL;TYPE=CELL:' + k.telefon);
+  if(k.email) zeilen.push('EMAIL:' + k.email);
+  if(k.adresse) zeilen.push('ADR;TYPE=WORK:;;' + k.adresse.replace(/,/g, ';') + ';;;');
+  zeilen.push('NOTE:' + k.kat + ' (Thanato)');
+  zeilen.push('END:VCARD');
+  const vcard = zeilen.join('\r\n');
+
+  const blob = new Blob([vcard], { type: 'text/vcard' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (k.name.replace(/[^\wäöüÄÖÜß \-]/g, '').trim() || 'kontakt') + '.vcf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 function openAnsprechpartner(itemId){
   const cached = fileCache[itemId];
   if(!cached || !cached.info) return;
