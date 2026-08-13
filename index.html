@@ -52,6 +52,9 @@
   .doc{display:flex;align-items:center;justify-content:space-between;background:var(--weiss);border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:8px;text-decoration:none;color:inherit;}
   .doc-name{font-size:13.5px;font-weight:500;}
   .doc-meta{font-size:11px;color:var(--grau);margin-top:2px;}
+  /* Vertauschte Gewichtung für Karten ohne "Öffnen"-Button */
+  .doc-name-alt{font-size:13.5px;font-weight:400;color:var(--grau);}
+  .doc-meta-alt{font-size:11px;font-weight:600;color:var(--anthrazit);margin-top:2px;}
   .send-btn{background:var(--anthrazit);color:var(--gold-soft);border:none;border-radius:20px;padding:8px 14px;font-size:12.5px;font-weight:500;flex-shrink:0;}
   .section-label{font-size:11.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gold);font-weight:600;margin:22px 0 10px;}
   .whoami{position:absolute;top:14px;right:16px;font-size:11px;color:var(--grau);}
@@ -763,28 +766,28 @@ function openPersonCard(person){
   const body = document.getElementById('apBody');
   body.innerHTML = `
     <div class="doc" style="cursor:default;">
-      <div><div class="doc-name">Name</div><div class="doc-meta">${person.name || '–'}</div></div>
+      <div><div class="doc-name-alt">Name</div><div class="doc-meta-alt">${person.name || '–'}</div></div>
     </div>
     ${person.verhaeltnis ? `
       <div class="doc" style="cursor:default;">
-        <div><div class="doc-name">Verhältnis zum Verstorbenen</div><div class="doc-meta">${person.verhaeltnis}</div></div>
+        <div><div class="doc-name-alt">Verhältnis zum Verstorbenen</div><div class="doc-meta-alt">${person.verhaeltnis}</div></div>
       </div>
     ` : ''}
     ${person.adresse ? `
       <a class="doc" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(person.adresse)}">
-        <div><div class="doc-name">Adresse</div><div class="doc-meta">${person.adresse}</div></div>
+        <div><div class="doc-name-alt">Adresse</div><div class="doc-meta-alt">${person.adresse}</div></div>
         <span class="send-btn">📍 Route</span>
       </a>
     ` : ''}
     ${person.telefon ? `
       <a class="doc" href="tel:${person.telefon.replace(/[^\d+]/g,'')}">
-        <div><div class="doc-name">Telefon</div><div class="doc-meta">${person.telefon}</div></div>
+        <div><div class="doc-name-alt">Telefon</div><div class="doc-meta-alt">${person.telefon}</div></div>
         <span class="send-btn">📞 Anrufen</span>
       </a>
     ` : ''}
     ${person.email ? `
       <a class="doc" href="mailto:${person.email}">
-        <div><div class="doc-name">E-Mail</div><div class="doc-meta">${person.email}</div></div>
+        <div><div class="doc-name-alt">E-Mail</div><div class="doc-meta-alt">${person.email}</div></div>
         <span class="send-btn">✉️ Schreiben</span>
       </a>
     ` : ''}
@@ -1026,7 +1029,7 @@ async function openDetail(itemId){
     ].filter(([,v]) => v);
     fieldsHtml = rows.map(([l,v]) => `
       <div class="doc" style="cursor:default;">
-        <div><div class="doc-name">${l}</div><div class="doc-meta">${v}</div></div>
+        <div><div class="doc-name-alt">${l}</div><div class="doc-meta-alt">${v}</div></div>
       </div>
     `).join('');
   } else {
