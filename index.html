@@ -964,7 +964,7 @@ async function openDetail(itemId){
       const docsData = await graphGet(`/me/drive/items/${match.id}/children`);
       const docs = docsData.value || [];
       scanBox.outerHTML = docs.length ? docs.map(d => `
-        <a class="doc" href="${d.webUrl}" target="_blank" rel="noopener">
+        <a class="doc" href="${d['@microsoft.graph.downloadUrl'] || d.webUrl}" target="_blank" rel="noopener">
           <div><div class="doc-name">${d.name}</div><div class="doc-meta">${(d.size/1024).toFixed(0)} KB</div></div>
           <span class="send-btn">Öffnen</span>
         </a>
