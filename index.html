@@ -954,8 +954,10 @@ async function openDetail(itemId){
   try{
     // Unterlagen-Ordner werden "Rufname Familienname" benannt (anders als die Excel-Datei,
     // die "Familienname Rufname" heißt) - daher hier info.name (Rufname zuerst) nutzen.
+    // Der Unterlagen-Ordner liegt im selben Jahresordner (activeTab) wie die Excel-Datei,
+    // z.B. "Sterbefälle/Sterbefälle 2026/Unterlagen Johanna van Deuzzen".
     const folderSearchName = (info && info.name) ? info.name : baseName;
-    const scanData = await graphGet(`/me/drive/root:/Scan:/children`);
+    const scanData = await graphGet(`/me/drive/root:/${encPath('Sterbefälle/' + activeTab)}:/children`);
     const match = (scanData.value || []).find(f => f.folder && f.name.toLowerCase().includes(folderSearchName.toLowerCase()));
     const scanBox = document.getElementById('scanDocs');
     if(match){
