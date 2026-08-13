@@ -233,6 +233,37 @@ async function openScanDoc(itemId){
   }
 }
 
+// Verschickt ein Dokument aus dem Unterlagen-Ordner über die native Teilen-Funktion
+// des Geräts (WhatsApp, Mail, etc.) - lädt die Datei authentifiziert und übergibt sie
+// als File-Objekt an die Web-Share-API.
+async function shareScanDoc(itemId){
+  const d = docCache[itemId];
+  if(!d) return;
+  const mimeType = (d.file && d.file.mimeType) || 'application/octet-stream';
+  try{
+    await ensureToken();
+    const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/content`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if(!res.ok) throw new Error(`Download-Fehler ${res.status}`);
+    const blob = await res.blob();
+    const file = new File([blob], d.name, { type: mimeType });
+
+    if(navigator.canShare && navigator.canShare({ files: [file] })){
+      await navigator.share({ files: [file], title: d.name });
+    } else {
+      // Fallback: Datei öffnen, damit der Nutzer sie von dort aus manuell teilen kann.
+      const url = URL.createObjectURL(file);
+      window.open(url, '_blank');
+      alert('Direktes Versenden wird von diesem Gerät/Browser nicht unterstützt. Die Datei wurde stattdessen geöffnet - von dort kannst du die Teilen-Funktion nutzen.');
+    }
+  }catch(err){
+    if(err.name !== 'AbortError'){ // Abbruch durch Nutzer selbst ist kein Fehler
+      alert('Dokument konnte nicht versendet werden: ' + err.message);
+    }
+  }
+}
+
 function excelSerialToDate(serial){
   const utcDays = Math.floor(serial - 25569);
   return new Date(utcDays * 86400 * 1000);
@@ -991,10 +1022,13 @@ async function openDetail(itemId){
       const docs = docsData.value || [];
       docs.forEach(d => { docCache[d.id] = d; });
       scanBox.outerHTML = docs.length ? docs.map(d => `
-        <button class="doc" style="width:100%;text-align:left;border:1px solid var(--line);" onclick="openScanDoc('${d.id}')">
+        <div class="doc" style="border:1px solid var(--line);">
           <div><div class="doc-name">${d.name}</div><div class="doc-meta">${(d.size/1024).toFixed(0)} KB</div></div>
-          <span class="send-btn">Öffnen</span>
-        </button>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="send-btn" style="border:none;cursor:pointer;" onclick="openScanDoc('${d.id}')">Öffnen</button>
+            <button class="send-btn" style="border:none;cursor:pointer;background:var(--gold);color:var(--anthrazit);" onclick="shareScanDoc('${d.id}')">Senden</button>
+          </div>
+        </div>
       `).join('') : '<div class="empty" style="padding:20px 0;">Ordner ist leer.</div>';
     } else {
       scanBox.outerHTML = `<div class="empty" style="padding:20px 0;">Kein passender Unterlagen-Ordner ("Unterlagen ${folderSearchName}") gefunden.</div>`;
