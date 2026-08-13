@@ -75,6 +75,12 @@
   .contact-actions{display:flex;gap:8px;margin-top:10px;}
   .action-btn{flex:1;text-align:center;background:var(--creme);border:1px solid var(--gold-soft);color:var(--anthrazit);font-size:12.5px;font-weight:500;padding:9px 10px;border-radius:8px;text-decoration:none;}
 
+  /* ====== NOTIZ (Post-it) ====== */
+  .notiz-btn{flex-shrink:0;width:30px;height:30px;border-radius:50%;border:1px solid var(--gold-soft);background:var(--weiss);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;padding:0;}
+  .notiz-btn.hat-notiz{background:#FFF3C4;border-color:#D9B23C;}
+  .notiz-btn.hat-notiz::after{content:'';position:absolute;top:-2px;right:-2px;width:8px;height:8px;border-radius:50%;background:#B8924A;}
+  .notiz-textarea{width:100%;min-height:220px;padding:14px;border:1px solid var(--gold-soft);border-radius:10px;font-size:14px;font-family:inherit;resize:vertical;background:#FFFDF5;line-height:1.5;}
+
   /* ====== SPLASH SCREEN ====== */
   #splash{
     position:fixed; inset:0; z-index:9999;
@@ -126,7 +132,8 @@
   <div class="overlay" id="overlay">
     <div class="detail-header">
       <button class="back" onclick="closeDetail()">← Zurück</button>
-      <div class="case-name" id="dName"></div>
+      <div class="case-name" id="dName" style="flex:1;"></div>
+      <div id="dNotizBtn"></div>
     </div>
     <div class="detail-body" id="dBody"></div>
   </div>
@@ -181,6 +188,19 @@
       <input id="kfAdresse" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 20px;font-size:14px;">
       <button class="kontakte-btn" style="width:100%;text-align:center;background:var(--anthrazit);color:var(--gold-soft);border:none;margin-bottom:10px;" onclick="saveKontaktForm()">Speichern</button>
       <button id="kfDeleteBtn" class="kontakte-btn" style="width:100%;text-align:center;color:#B23; display:none;" onclick="deleteKontaktForm()">Löschen</button>
+    </div>
+  </div>
+
+  <!-- NOTIZ (Post-it) -->
+  <div class="overlay" id="notizOverlay" style="z-index:20;">
+    <div class="detail-header">
+      <button class="back" onclick="schliesseNotiz()">← Zurück</button>
+      <div class="case-name" id="notizTitel">Notiz</div>
+    </div>
+    <div class="detail-body">
+      <textarea id="notizText" class="notiz-textarea" placeholder="Notiz eintragen …"></textarea>
+      <button class="kontakte-btn" style="width:100%;text-align:center;background:var(--anthrazit);color:var(--gold-soft);border:none;margin-top:14px;margin-bottom:10px;" onclick="speichereNotiz()">Speichern</button>
+      <button id="notizLoeschBtn" class="kontakte-btn" style="width:100%;text-align:center;color:#B23;" onclick="loescheNotiz()">Notiz löschen</button>
     </div>
   </div>
 
@@ -700,6 +720,62 @@ async function loadFiles(folderName){
 let currentEnriched = [];
 let searchTerms = [];
 let anyFileId = null;
+// ====== NOTIZEN (Post-it) - flexibel an vielen Stellen einsetzbar ======
+// Jede Notiz wird über einen eindeutigen "key" (z.B. 'fall-<id>', 'kontakt-<id>')
+// identifiziert und lokal auf dem Gerät gespeichert.
+function ladeNotizen(){
+  try{ return JSON.parse(localStorage.getItem('thanato_notizen') || '{}'); }
+  catch(e){ return {}; }
+}
+function speichereNotizen(obj){
+  localStorage.setItem('thanato_notizen', JSON.stringify(obj));
+}
+function hatNotiz(key){
+  const n = ladeNotizen();
+  return !!(n[key] && n[key].trim());
+}
+// Baut das HTML für einen kleinen Notiz-Button, der überall eingesetzt werden kann.
+function notizBtnHtml(key, titel){
+  const kSafe = key.replace(/'/g,"\\'");
+  const tSafe = (titel||'Notiz').replace(/'/g,"\\'");
+  return `<button type="button" class="notiz-btn ${hatNotiz(key)?'hat-notiz':''}" title="Notiz" onclick="event.stopPropagation(); oeffneNotiz('${kSafe}','${tSafe}')">📝</button>`;
+}
+
+let notizAktuellerKey = null;
+function oeffneNotiz(key, titel){
+  notizAktuellerKey = key;
+  const n = ladeNotizen();
+  document.getElementById('notizTitel').textContent = titel ? ('Notiz · ' + titel) : 'Notiz';
+  document.getElementById('notizText').value = n[key] || '';
+  document.getElementById('notizLoeschBtn').style.display = n[key] ? 'block' : 'none';
+  document.getElementById('notizOverlay').classList.add('open');
+}
+function schliesseNotiz(){
+  document.getElementById('notizOverlay').classList.remove('open');
+}
+function notizAnsichtenAktualisieren(){
+  // Aktualisiert sichtbare Listen, damit der Notiz-Indikator (Punkt) sofort stimmt
+  if(document.getElementById('kontakteOverlay').classList.contains('open') && kontakteCache) renderKontakte();
+  if(activeTab && currentEnriched) renderCaseList(activeTab, currentEnriched);
+}
+function speichereNotiz(){
+  if(!notizAktuellerKey) return;
+  const n = ladeNotizen();
+  const text = document.getElementById('notizText').value;
+  if(text.trim()) n[notizAktuellerKey] = text; else delete n[notizAktuellerKey];
+  speichereNotizen(n);
+  schliesseNotiz();
+  notizAnsichtenAktualisieren();
+}
+function loescheNotiz(){
+  if(!notizAktuellerKey) return;
+  const n = ladeNotizen();
+  delete n[notizAktuellerKey];
+  speichereNotizen(n);
+  schliesseNotiz();
+  notizAnsichtenAktualisieren();
+}
+
 let kontakteCache = null;
 let kontakteKatFilter = 'Alle';
 
@@ -794,8 +870,13 @@ function renderKontakte(){
   const listEl = document.getElementById('kontakteList');
   listEl.innerHTML = filtered.length ? filtered.map(k => `
     <div class="contact-card">
-      <div class="contact-name">${k.name}</div>
-      <div class="contact-kat">${k.kat}${k.ort ? ' · '+k.ort : ''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div>
+          <div class="contact-name">${k.name}</div>
+          <div class="contact-kat">${k.kat}${k.ort ? ' · '+k.ort : ''}</div>
+        </div>
+        ${notizBtnHtml('kontakt-'+k.id, k.name)}
+      </div>
       ${(k.telefone||[]).length ? `
         <div style="margin:8px 0;">
           ${k.telefone.map(t => `
@@ -989,7 +1070,7 @@ function openAnsprechpartner(itemId){
     adresse: info.apAdresse,
     telefon: info.telefon,
     email: info.email
-  });
+  }, 'person-' + itemId + '-ansprechpartner');
 }
 
 function openKindDetail(itemId, index){
@@ -1002,14 +1083,15 @@ function openKindDetail(itemId, index){
     adresse: kind.adresse,
     telefon: kind.telefon,
     email: kind.email
-  });
+  }, 'person-' + itemId + '-kind-' + index);
 }
 
-function openPersonCard(person){
+function openPersonCard(person, notizKey){
   const body = document.getElementById('apBody');
   body.innerHTML = `
     <div class="doc" style="cursor:default;">
       <div><div class="doc-name-alt">Name</div><div class="doc-meta-alt">${person.name || '–'}</div></div>
+      ${notizKey ? notizBtnHtml(notizKey, person.name) : ''}
     </div>
     ${person.verhaeltnis ? `
       <div class="doc" style="cursor:default;">
@@ -1162,7 +1244,7 @@ function renderCaseList(folderName, enriched){
       ? [info.sterbedatum, info.ansprechpartner].filter(Boolean).join(' · ')
       : `Zuletzt geändert: ${new Date(file.lastModifiedDateTime).toLocaleDateString('de-DE')}`;
 
-    const btn = document.createElement('button');
+    const btn = document.createElement('div');
     btn.className = 'case';
     btn.onclick = () => openDetail(file.id);
     btn.innerHTML = `
@@ -1171,6 +1253,7 @@ function renderCaseList(folderName, enriched){
         <div class="case-name">${displayName}</div>
         <div class="case-sub">${sub}</div>
       </div>
+      ${notizBtnHtml('fall-'+file.id, displayName)}
     `;
     list.appendChild(btn);
   }
@@ -1219,6 +1302,7 @@ async function openDetail(itemId){
   let { file, info, baseName, displayName } = cached;
 
   document.getElementById('dName').textContent = displayName;
+  document.getElementById('dNotizBtn').innerHTML = notizBtnHtml('fall-'+itemId, displayName);
   const body = document.getElementById('dBody');
   document.getElementById('overlay').classList.add('open');
 
@@ -1231,6 +1315,7 @@ async function openDetail(itemId){
     saveDiskCache(diskCache);
     displayName = (info && info.name) ? info.name : baseName;
     document.getElementById('dName').textContent = displayName;
+    document.getElementById('dNotizBtn').innerHTML = notizBtnHtml('fall-'+itemId, displayName);
     fileCache[itemId] = { file, info, baseName, displayName };
     // Auch den Eintrag in der Liste aktualisieren, damit er beim Zurückgehen sofort stimmt
     const entry = currentEnriched.find(e => e.file.id === itemId);
