@@ -172,8 +172,9 @@
       <input id="kfName" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
       <label style="font-size:12.5px;color:var(--grau);">Ort</label>
       <input id="kfOrt" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
-      <label style="font-size:12.5px;color:var(--grau);">Telefon</label>
-      <input id="kfTelefon" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
+      <label style="font-size:12.5px;color:var(--grau);">Telefonnummern</label>
+      <div id="kfTelefonListe" style="margin:6px 0 6px;"></div>
+      <button type="button" style="background:none;border:1px dashed var(--gold-soft);border-radius:10px;padding:9px 14px;font-size:13px;color:var(--anthrazit);cursor:pointer;width:100%;margin-bottom:14px;" onclick="kfTelefonZeileHinzufuegen()">➕ Weitere Telefonnummer</button>
       <label style="font-size:12.5px;color:var(--grau);">E-Mail</label>
       <input id="kfEmail" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;">
       <label style="font-size:12.5px;color:var(--grau);">Adresse</label>
@@ -743,7 +744,7 @@ async function openKontakte(){
             kat:'Pfarrer',
             name: [r[1], r[2]].filter(Boolean).join(' '),
             ort: r[4] || '',
-            telefon: r[5] ? String(r[5]) : '',
+            telefone: r[5] ? [{ nummer: String(r[5]), notiz: '' }] : [],
             email: r[9] || '',
             adresse: ''
           });
@@ -759,7 +760,7 @@ async function openKontakte(){
             kat:'Einrichtung',
             name: r[1],
             ort: r[4] || '',
-            telefon:'',
+            telefone: [],
             email:'',
             adresse: [r[2], r[3], r[4]].filter(Boolean).join(', ')
           });
@@ -795,8 +796,16 @@ function renderKontakte(){
     <div class="contact-card">
       <div class="contact-name">${k.name}</div>
       <div class="contact-kat">${k.kat}${k.ort ? ' · '+k.ort : ''}</div>
+      ${(k.telefone||[]).length ? `
+        <div style="margin:8px 0;">
+          ${k.telefone.map(t => `
+            <a href="tel:${t.nummer.replace(/[^\d+]/g,'')}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;padding:4px 0;">
+              <span>📞 ${t.nummer}</span>${t.notiz ? `<span style="font-size:11.5px;color:var(--grau);">(${t.notiz})</span>` : ''}
+            </a>
+          `).join('')}
+        </div>
+      ` : ''}
       <div class="contact-actions">
-        ${k.telefon ? `<a class="action-btn" href="tel:${k.telefon.replace(/[^\d+]/g,'')}">📞 Anrufen</a>` : ''}
         ${k.email ? `<a class="action-btn" href="mailto:${k.email}">✉️ Mail</a>` : ''}
         ${k.adresse ? `<a class="action-btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(k.adresse)}">📍 Route</a>` : ''}
       </div>
@@ -820,14 +829,44 @@ function openKontaktForm(id){
   document.getElementById('kfKat').value = k ? k.kat : 'Sonstiges';
   document.getElementById('kfName').value = k ? k.name : '';
   document.getElementById('kfOrt').value = k ? k.ort : '';
-  document.getElementById('kfTelefon').value = k ? k.telefon : '';
   document.getElementById('kfEmail').value = k ? k.email : '';
   document.getElementById('kfAdresse').value = k ? k.adresse : '';
   document.getElementById('kfDeleteBtn').style.display = k ? 'block' : 'none';
+
+  const telefonListe = document.getElementById('kfTelefonListe');
+  telefonListe.innerHTML = '';
+  const telefone = (k && k.telefone && k.telefone.length) ? k.telefone : [{ nummer:'', notiz:'' }];
+  telefone.forEach(t => kfTelefonZeileHinzufuegen(t.nummer, t.notiz));
+
   document.getElementById('kontaktFormOverlay').classList.add('open');
 }
 function closeKontaktForm(){
   document.getElementById('kontaktFormOverlay').classList.remove('open');
+}
+
+// Fügt eine weitere Telefonnummer-Zeile (Nummer + Notiz) im Kontaktformular hinzu.
+function kfTelefonZeileHinzufuegen(nummer, notiz){
+  const container = document.getElementById('kfTelefonListe');
+  const zeile = document.createElement('div');
+  zeile.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;align-items:center;';
+  zeile.innerHTML = `
+    <input type="text" class="kf-telefon-nummer" placeholder="Telefonnummer" value="${nummer||''}" style="flex:1.3;padding:11px 12px;border:1px solid var(--gold-soft);border-radius:10px;font-size:14px;">
+    <input type="text" class="kf-telefon-notiz" placeholder="Notiz (z.B. Mobil)" value="${notiz||''}" style="flex:1;padding:11px 12px;border:1px solid var(--gold-soft);border-radius:10px;font-size:14px;">
+    <button type="button" onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--grau);font-size:18px;padding:4px 8px;cursor:pointer;">✕</button>
+  `;
+  container.appendChild(zeile);
+}
+
+// Liest alle ausgefüllten Telefonnummer-Zeilen aus dem Formular aus.
+function kfTelefoneSammeln(){
+  const nummern = Array.from(document.querySelectorAll('#kfTelefonListe .kf-telefon-nummer'));
+  const notizen = Array.from(document.querySelectorAll('#kfTelefonListe .kf-telefon-notiz'));
+  const telefone = [];
+  nummern.forEach((el, i) => {
+    const nummer = el.value.trim();
+    if(nummer) telefone.push({ nummer, notiz: notizen[i].value.trim() });
+  });
+  return telefone;
 }
 
 function saveKontaktForm(){
@@ -835,7 +874,7 @@ function saveKontaktForm(){
     kat: document.getElementById('kfKat').value,
     name: document.getElementById('kfName').value.trim(),
     ort: document.getElementById('kfOrt').value.trim(),
-    telefon: document.getElementById('kfTelefon').value.trim(),
+    telefone: kfTelefoneSammeln(),
     email: document.getElementById('kfEmail').value.trim(),
     adresse: document.getElementById('kfAdresse').value.trim()
   };
@@ -890,7 +929,7 @@ async function teileKontakt(id){
   const k = kontakteCache.find(x => x.id === id);
   if(!k) return;
   const zeilen = [k.name, k.kat + (k.ort ? ' · ' + k.ort : '')];
-  if(k.telefon) zeilen.push('Telefon: ' + k.telefon);
+  (k.telefone||[]).forEach(t => zeilen.push('Telefon' + (t.notiz ? ' (' + t.notiz + ')' : '') + ': ' + t.nummer));
   if(k.email) zeilen.push('E-Mail: ' + k.email);
   if(k.adresse) zeilen.push('Adresse: ' + k.adresse);
   const text = zeilen.join('\n');
@@ -917,7 +956,11 @@ function kontaktInsTelefon(id){
   if(!k) return;
 
   const zeilen = ['BEGIN:VCARD', 'VERSION:3.0', 'FN:' + k.name];
-  if(k.telefon) zeilen.push('TEL;TYPE=CELL:' + k.telefon);
+  (k.telefone||[]).forEach(t => {
+    // Notiz wird als Zusatz im TYPE-Feld angehängt, damit sie im Telefon sichtbar bleibt
+    const typ = t.notiz ? t.notiz.toUpperCase().replace(/[^A-ZÄÖÜ0-9 ]/g,'') : 'CELL';
+    zeilen.push(`TEL;TYPE=${typ || 'CELL'}:${t.nummer}`);
+  });
   if(k.email) zeilen.push('EMAIL:' + k.email);
   if(k.adresse) zeilen.push('ADR;TYPE=WORK:;;' + k.adresse.replace(/,/g, ';') + ';;;');
   zeilen.push('NOTE:' + k.kat + ' (Thanato)');
