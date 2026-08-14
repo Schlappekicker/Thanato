@@ -189,7 +189,8 @@
       <select id="kfKat" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;background:var(--weiss);">
         <option value="Pfarrer">Pfarrer</option>
         <option value="Trauerredner">Trauerredner</option>
-        <option value="Einrichtungen">Einrichtungen</option>
+        <option value="Kliniken">Kliniken</option>
+        <option value="Seniorenzentren">Seniorenzentren</option>
         <option value="Friedhof">Friedhof</option>
         <option value="Floristen">Floristen</option>
         <option value="Standesämter">Standesämter</option>
@@ -856,7 +857,7 @@ async function openKontakte(){
           result.push({
             id: 'excel-einrichtung-' + i,
             quelle: 'excel',
-            kat:'Einrichtungen',
+            kat:'Kliniken',
             name: r[1],
             ort: r[4] || '',
             telefone: [],
@@ -878,7 +879,7 @@ async function openKontakte(){
     merged = merged.concat(ladeLokaleKontakte());
 
     // Alte Kategoriebezeichnungen auf die aktuellen Namen migrieren
-    const katUmbenennung = { 'Einrichtung':'Einrichtungen', 'Florist':'Floristen' };
+    const katUmbenennung = { 'Einrichtung':'Kliniken', 'Einrichtungen':'Kliniken', 'Florist':'Floristen' };
     merged = merged.map(k => katUmbenennung[k.kat] ? { ...k, kat: katUmbenennung[k.kat] } : k);
 
     kontakteCache = merged;
