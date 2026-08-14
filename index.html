@@ -161,6 +161,22 @@
     </div>
   </div>
 
+  <!-- KONTAKT-DETAILANSICHT -->
+  <div class="overlay" id="kontaktDetailOverlay" style="z-index:16;">
+    <input type="hidden" id="kdAktId">
+    <div class="detail-header">
+      <button class="back" onclick="closeKontaktDetail()">← Zurück</button>
+      <div class="case-name" id="kdName" style="flex:1;"></div>
+      <div id="kdNotizBtn"></div>
+    </div>
+    <div class="detail-body">
+      <div id="kdBody"></div>
+      <button class="kontakte-btn" style="width:100%;text-align:center;background:var(--anthrazit);color:var(--gold-soft);border:none;margin-top:16px;margin-bottom:10px;" onclick="kdBearbeiten()">✏️ Bearbeiten</button>
+      <button class="kontakte-btn" style="width:100%;text-align:center;margin-bottom:10px;" onclick="kdTeilen()">↗️ Teilen</button>
+      <button class="kontakte-btn" style="width:100%;text-align:center;" onclick="kdInsTelefon()">📇 Ins Telefon speichern</button>
+    </div>
+  </div>
+
   <!-- KONTAKT BEARBEITEN/NEU -->
   <div class="overlay" id="kontaktFormOverlay" style="z-index:16;">
     <div class="detail-header">
@@ -880,7 +896,7 @@ function renderKontakte(){
   const filtered = kontakteCache.filter(k => kontakteKatFilter==='Alle' || k.kat===kontakteKatFilter);
   const listEl = document.getElementById('kontakteList');
   listEl.innerHTML = filtered.length ? filtered.map(k => `
-    <div class="contact-card">
+    <div class="contact-card" style="cursor:pointer;" onclick="openKontaktDetail('${k.id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div>
           <div class="contact-name">${k.name}</div>
@@ -889,26 +905,70 @@ function renderKontakte(){
         </div>
         ${notizBtnHtml('kontakt-'+k.id, k.name)}
       </div>
-      ${(k.telefone||[]).length ? `
-        <div style="margin:8px 0;">
-          ${k.telefone.map(t => `
-            <a href="tel:${t.nummer.replace(/[^\d+]/g,'')}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;padding:4px 0;">
-              <span>📞 ${t.nummer}</span>${t.notiz ? `<span style="font-size:11.5px;color:var(--grau);">(${t.notiz})</span>` : ''}
-            </a>
-          `).join('')}
-        </div>
-      ` : ''}
-      <div class="contact-actions">
-        ${k.email ? `<a class="action-btn" href="mailto:${k.email}">✉️ Mail</a>` : ''}
-        ${k.adresse ? `<a class="action-btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(k.adresse)}">📍 Route</a>` : ''}
-      </div>
-      <div class="contact-actions" style="margin-top:6px;">
-        <button class="action-btn" style="cursor:pointer;border:none;" onclick="openKontaktForm('${k.id}')">✏️ Bearbeiten</button>
-        <button class="action-btn" style="cursor:pointer;border:none;" onclick="teileKontakt('${k.id}')">↗️ Teilen</button>
-        <button class="action-btn" style="cursor:pointer;border:none;" onclick="kontaktInsTelefon('${k.id}')">📇 Ins Telefon</button>
-      </div>
     </div>
   `).join('') : '<div class="empty">Keine Kontakte gefunden.</div>';
+}
+
+// ====== KONTAKT-DETAILANSICHT (wie bei den Sterbefällen) ======
+function openKontaktDetail(id){
+  const k = kontakteCache.find(x => x.id === id);
+  if(!k) return;
+  document.getElementById('kdName').textContent = k.name;
+  document.getElementById('kdNotizBtn').innerHTML = notizBtnHtml('kontakt-'+k.id, k.name);
+
+  const rows = [
+    ['Kategorie', k.kat + (k.ort ? ' · '+k.ort : '')],
+    ['Konfession', k.konfession]
+  ].filter(([,v]) => v);
+
+  let html = rows.map(([l,v]) => `
+    <div class="doc" style="cursor:default;">
+      <div><div class="doc-name-alt">${l}</div><div class="doc-meta-alt">${v}</div></div>
+    </div>
+  `).join('');
+
+  if((k.telefone||[]).length){
+    html += k.telefone.map(t => `
+      <a class="doc" href="tel:${t.nummer.replace(/[^\d+]/g,'')}">
+        <div><div class="doc-name-alt">Telefon${t.notiz ? ' ('+t.notiz+')' : ''}</div><div class="doc-meta-alt">${t.nummer}</div></div>
+        <span class="send-btn">📞 Anrufen</span>
+      </a>
+    `).join('');
+  }
+  if(k.email){
+    html += `
+      <a class="doc" href="mailto:${k.email}">
+        <div><div class="doc-name-alt">E-Mail</div><div class="doc-meta-alt">${k.email}</div></div>
+        <span class="send-btn">✉️ Mail</span>
+      </a>
+    `;
+  }
+  if(k.adresse){
+    html += `
+      <a class="doc" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(k.adresse)}">
+        <div><div class="doc-name-alt">Adresse</div><div class="doc-meta-alt">${k.adresse}</div></div>
+        <span class="send-btn">📍 Route</span>
+      </a>
+    `;
+  }
+
+  document.getElementById('kdBody').innerHTML = html;
+  document.getElementById('kdAktId').value = id;
+  document.getElementById('kontaktDetailOverlay').classList.add('open');
+}
+function closeKontaktDetail(){
+  document.getElementById('kontaktDetailOverlay').classList.remove('open');
+}
+function kdBearbeiten(){
+  const id = document.getElementById('kdAktId').value;
+  closeKontaktDetail();
+  openKontaktForm(id);
+}
+function kdTeilen(){
+  teileKontakt(document.getElementById('kdAktId').value);
+}
+function kdInsTelefon(){
+  kontaktInsTelefon(document.getElementById('kdAktId').value);
 }
 function setKontakteFilter(c){ kontakteKatFilter = c; renderKontakte(); }
 
