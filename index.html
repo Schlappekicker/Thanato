@@ -1316,9 +1316,28 @@ async function deepSearchCurrentFolder(){
 
 let resultCatFilter = 'Alle';
 
+// Wandelt ein deutsches Datum (TT.MM.JJJJ) in einen sortierbaren Wert um.
+function parseGermanDateSort(str){
+  if(!str) return null;
+  const m = String(str).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if(!m) return null;
+  return new Date(+m[3], +m[2]-1, +m[1]).getTime();
+}
+
 function renderCaseList(folderName, enriched){
   const list = document.getElementById('list');
-  const filtered = enriched.filter(({file, info}) => matchesSearch(info, file.name.replace(/\.xlsm?$/i,'')));
+  const filtered = enriched
+    .filter(({file, info}) => matchesSearch(info, file.name.replace(/\.xlsm?$/i,'')))
+    .slice()
+    .sort((a, b) => {
+      // Neuestes Sterbedatum zuerst; Fälle ohne (noch nicht geladenes) Datum ans Ende
+      const da = parseGermanDateSort(a.info && a.info.sterbedatum);
+      const db = parseGermanDateSort(b.info && b.info.sterbedatum);
+      if(da === null && db === null) return 0;
+      if(da === null) return 1;
+      if(db === null) return -1;
+      return db - da;
+    });
   list.innerHTML = `
     <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
       <span>${folderName} (${filtered.length}${filtered.length!==enriched.length ? ' von '+enriched.length : ''})</span>
