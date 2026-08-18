@@ -20,7 +20,11 @@
   *{box-sizing:border-box;}
   body{margin:0;background:var(--app-bg);color:var(--anthrazit);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
   .app{max-width:430px;margin:0 auto;min-height:100vh;background:var(--app-bg);display:flex;flex-direction:column;}
-  header{padding:22px 20px 18px;text-align:center;border-bottom:1px solid var(--line);}
+  header{padding:22px 20px 18px;text-align:center;border-bottom:1px solid var(--line);position:relative;overflow:hidden;}
+  .header-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:1;transition:opacity 1.2s ease;z-index:0;}
+  .header-bg.hide{opacity:0;}
+  .header-bg::after{content:'';position:absolute;inset:0;background:rgba(247,244,239,0.55);}
+  header .wordmark, header .subtitle{position:relative;z-index:1;}
   .wordmark{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:30px;letter-spacing:0.08em;}
   .subtitle{font-size:12.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--gold);font-weight:500;margin-top:4px;}
 
@@ -100,6 +104,7 @@
 <div class="app">
 
   <header>
+    <div class="header-bg" id="headerBg"></div>
     <div class="wordmark">THANATO</div>
     <div class="subtitle">Workflow-Assistent</div>
   </header>
@@ -1583,7 +1588,15 @@ if ("serviceWorker" in navigator) {
 
 <script>
 // Splash-Screen: mindestens kurz sichtbar, dann sanft ausblenden.
+// Der Header übernimmt dasselbe Bild als kurz sichtbaren Hintergrund und blendet
+// dann ebenfalls sanft aus (kein doppeltes Einbetten des Bildes nötig).
 (function(){
+  var splashEl = document.getElementById('splash');
+  var headerBg = document.getElementById('headerBg');
+  if(headerBg && splashEl){
+    headerBg.style.backgroundImage = splashEl.style.backgroundImage;
+  }
+
   var splashStart = Date.now();
   var minSichtbarMs = 1200;
   function hideSplash(){
@@ -1594,6 +1607,7 @@ if ("serviceWorker" in navigator) {
     setTimeout(function(){
       el.classList.add('hide');
       setTimeout(function(){ el.remove(); }, 700);
+      if(headerBg) headerBg.classList.add('hide');
     }, warten);
   }
   if(document.readyState === 'complete'){
