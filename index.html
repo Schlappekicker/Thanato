@@ -915,6 +915,15 @@ function renderKontakte(){
 }
 
 // ====== KONTAKT-DETAILANSICHT (wie bei den Sterbefällen) ======
+// Erkennt, ob eine Nummer voraussichtlich eine Mobilnummer ist (WhatsApp-fähig) -
+// entweder über die Notiz ("Mobil"/"Handy") oder über typische deutsche Vorwahlen
+// für Mobilfunk (015x, 016x, 017x).
+function istMobilnummer(t){
+  if(t.notiz && /mobil|handy/i.test(t.notiz)) return true;
+  const n = t.nummer.replace(/[^\d+]/g, '');
+  return /^(\+49|0049|0)?1[5-7]\d/.test(n.replace(/^\+?49/, '0').replace(/^0049/, '0'));
+}
+
 // Wandelt eine Telefonnummer in einen WhatsApp-Link (wa.me) um. WhatsApp braucht
 // die Nummer im internationalen Format ohne führende Null - bei deutschen Nummern
 // (0...) wird die 0 automatisch durch die Ländervorwahl 49 ersetzt.
@@ -949,7 +958,7 @@ function openKontaktDetail(id){
         <div><div class="doc-name-alt">Telefon${t.notiz ? ' ('+t.notiz+')' : ''}</div><div class="doc-meta-alt">${t.nummer}</div></div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
           <a class="send-btn" href="tel:${t.nummer.replace(/[^\d+]/g,'')}" style="text-decoration:none;">📞</a>
-          <a class="send-btn" href="${waLink(t.nummer)}" target="_blank" rel="noopener" style="text-decoration:none;background:#25D366;color:#fff;">💬 WhatsApp</a>
+          ${istMobilnummer(t) ? `<a class="send-btn" href="${waLink(t.nummer)}" target="_blank" rel="noopener" style="text-decoration:none;background:#25D366;color:#fff;">💬 WhatsApp</a>` : ''}
         </div>
       </div>
     `).join('');
