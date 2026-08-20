@@ -198,7 +198,7 @@
         <option value="Hospize">Hospize</option>
         <option value="Organisten">Organisten</option>
         <option value="Steinmetze">Steinmetze</option>
-        <option value="Friedhof">Friedhof</option>
+        <option value="Friedhöfe">Friedhöfe</option>
         <option value="Floristen">Floristen</option>
         <option value="Standesämter">Standesämter</option>
         <option value="Sonstiges">Sonstiges</option>
@@ -886,7 +886,7 @@ async function openKontakte(){
     merged = merged.concat(ladeLokaleKontakte());
 
     // Alte Kategoriebezeichnungen auf die aktuellen Namen migrieren
-    const katUmbenennung = { 'Einrichtung':'Kliniken', 'Einrichtungen':'Kliniken', 'Florist':'Floristen' };
+    const katUmbenennung = { 'Einrichtung':'Kliniken', 'Einrichtungen':'Kliniken', 'Florist':'Floristen', 'Friedhof':'Friedhöfe' };
     merged = merged.map(k => katUmbenennung[k.kat] ? { ...k, kat: katUmbenennung[k.kat] } : k);
 
     kontakteCache = merged;
