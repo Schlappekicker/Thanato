@@ -546,7 +546,12 @@ async function sendeAnKontakt(kanal){
     }
 
     if(kanal === 'mail' && k.email){
-      try{ await navigator.clipboard.writeText(k.email); }catch(e){ /* Zwischenablage optional */ }
+      try{
+        await navigator.clipboard.writeText(k.email);
+        alert(`E-Mail-Adresse kopiert: ${k.email}\n\nBitte im nächsten Schritt in deiner Mail-App ins „An"-Feld einfügen (Feld antippen und halten → „Einfügen").`);
+      }catch(e){
+        alert(`Deine Mail-App trägt den Empfänger nicht automatisch ein. Bitte notiere dir die Adresse:\n${k.email}`);
+      }
     }
 
     if(navigator.canShare && navigator.canShare({ files })){
