@@ -79,6 +79,18 @@
   .contact-actions{display:flex;gap:8px;margin-top:10px;}
   .action-btn{flex:1;text-align:center;background:var(--creme);border:1px solid var(--gold-soft);color:var(--anthrazit);font-size:12.5px;font-weight:500;padding:9px 10px;border-radius:8px;text-decoration:none;}
 
+  /* ====== UNTERLAGEN VERSENDEN (Mehrfachauswahl + Empfänger) ====== */
+  .doc-check{width:20px;height:20px;border:2px solid var(--gold-soft);border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--weiss);cursor:pointer;}
+  .doc-check.on{background:var(--gold);border-color:var(--gold);}
+  .send-bar{position:sticky;bottom:0;background:linear-gradient(0deg, var(--app-bg) 65%, transparent);padding:14px 0 4px;margin-top:2px;display:none;}
+  .send-bar.show{display:block;}
+  .send-bar button{width:100%;background:var(--anthrazit);color:var(--gold-soft);border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;}
+  .send-choice-btn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--weiss);border:1px solid var(--gold-soft);border-radius:10px;padding:13px 15px;margin-bottom:10px;cursor:pointer;font-family:inherit;}
+  .send-hint{font-size:11.5px;color:var(--grau);margin:-4px 0 16px;}
+  .versand-log-item{display:flex;gap:8px;align-items:flex-start;background:var(--weiss);border:1px solid var(--line);border-radius:10px;padding:10px 13px;margin-bottom:6px;font-size:12.5px;color:var(--anthrazit);}
+  .versand-log-item .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);margin-top:6px;flex-shrink:0;}
+  .versand-log-item span{display:block;font-size:11px;color:var(--grau);margin-top:2px;}
+
   /* ====== NOTIZ (Post-it) ====== */
   .notiz-btn{flex-shrink:0;width:30px;height:30px;border-radius:50%;border:1px solid var(--gold-soft);background:var(--weiss);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;padding:0;}
   .notiz-btn.hat-notiz{background:#FFF3C4;border-color:#D9B23C;}
@@ -218,6 +230,24 @@
       <input id="kfAdresse" type="text" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 20px;font-size:14px;">
       <button class="kontakte-btn" style="width:100%;margin-left:0;margin-right:0;text-align:center;background:var(--anthrazit);color:var(--gold-soft);border:none;margin-bottom:10px;" onclick="saveKontaktForm()">Speichern</button>
       <button id="kfDeleteBtn" class="kontakte-btn" style="width:100%;margin-left:0;margin-right:0;text-align:center;color:#B23; display:none;" onclick="deleteKontaktForm()">Löschen</button>
+    </div>
+  </div>
+
+  <!-- UNTERLAGEN VERSENDEN: EMPFÄNGER + KANAL WÄHLEN -->
+  <div class="overlay" id="sendOverlay" style="z-index:18;">
+    <div class="detail-header">
+      <button class="back" onclick="closeSendOverlay()">← Zurück</button>
+      <div class="case-name" id="sendTitel" style="flex:1;">Empfänger wählen</div>
+    </div>
+    <div class="detail-body">
+      <div id="sendSchrittKontakt">
+        <div class="chips" id="sendKontakteFilter"></div>
+        <div id="sendKontakteList"><div class="loading">Lade Kontakte …</div></div>
+      </div>
+      <div id="sendSchrittKanal" style="display:none;">
+        <button class="back" style="margin-bottom:16px;" onclick="sendZurueckZuKontakt()">← Anderer Empfänger</button>
+        <div id="sendKanalBody"></div>
+      </div>
     </div>
   </div>
 
@@ -387,6 +417,189 @@ async function shareScanDoc(itemId){
       alert('Dokument konnte nicht versendet werden: ' + err.message);
     }
   }
+}
+
+// ====== MEHRERE UNTERLAGEN AUSWÄHLEN UND AN EINEN KONTAKT SENDEN ======
+// Ergänzt shareScanDoc(): statt der generischen Geräte-Teilen-Funktion (ein Dokument,
+// keine Empfängerinfo) kann der Nutzer hier mehrere Dokumente markieren und einen
+// Empfänger aus der eigenen Kontaktverwaltung wählen. Je nachdem, ob beim Kontakt eine
+// E-Mail-Adresse und/oder eine Mobilnummer hinterlegt ist, wird die passende Versandart
+// angeboten.
+let selectedDocIds = new Set();
+let currentDetailItemId = null;
+let sendKontakteKatFilter = 'Alle';
+let sendGewaehlterKontakt = null;
+
+function toggleDocSelect(id, el){
+  if(selectedDocIds.has(id)){ selectedDocIds.delete(id); el.classList.remove('on'); el.textContent = ''; }
+  else { selectedDocIds.add(id); el.classList.add('on'); el.textContent = '✓'; }
+  updateSendBar();
+}
+function updateSendBar(){
+  const bar = document.getElementById('sendBar');
+  if(!bar) return;
+  const n = selectedDocIds.size;
+  const countEl = document.getElementById('sendBarCount');
+  if(countEl) countEl.textContent = n;
+  bar.classList.toggle('show', n > 0);
+}
+
+async function openSendOverlay(){
+  if(selectedDocIds.size === 0) return;
+  document.getElementById('sendSchrittKanal').style.display = 'none';
+  document.getElementById('sendSchrittKontakt').style.display = 'block';
+  document.getElementById('sendTitel').textContent = 'Empfänger wählen';
+  document.getElementById('sendOverlay').classList.add('open');
+  const listEl = document.getElementById('sendKontakteList');
+  if(!kontakteCache){
+    listEl.innerHTML = '<div class="loading">Lade Kontakte …</div>';
+    try{
+      await ladeKontakteInCache();
+    }catch(err){
+      listEl.innerHTML = `<div class="error-box">Kontakte konnten nicht geladen werden: ${err.message}</div>`;
+      return;
+    }
+  }
+  renderSendKontakte();
+}
+function closeSendOverlay(){
+  document.getElementById('sendOverlay').classList.remove('open');
+}
+function renderSendKontakte(){
+  const cats = ['Alle', ...new Set(kontakteCache.map(k => k.kat))];
+  document.getElementById('sendKontakteFilter').innerHTML = cats.map(c => `
+    <button class="cat-chip ${c===sendKontakteKatFilter?'on':''}" onclick="setSendKontakteFilter('${c}')">${c}</button>
+  `).join('');
+  const filtered = kontakteCache.filter(k => sendKontakteKatFilter==='Alle' || k.kat===sendKontakteKatFilter);
+  const listEl = document.getElementById('sendKontakteList');
+  listEl.innerHTML = filtered.length ? filtered.map(k => `
+    <div class="contact-card" style="cursor:pointer;" onclick="waehleSendKontakt('${k.id}')">
+      <div class="contact-name">${k.name}</div>
+      <div class="contact-kat">${k.kat}${k.ort ? ' · '+k.ort : ''}</div>
+    </div>
+  `).join('') : '<div class="empty">Keine Kontakte gefunden.</div>';
+}
+function setSendKontakteFilter(c){ sendKontakteKatFilter = c; renderSendKontakte(); }
+
+function waehleSendKontakt(id){
+  const k = kontakteCache.find(x => x.id === id);
+  if(!k) return;
+  sendGewaehlterKontakt = k;
+  const mobil = (k.telefone||[]).find(istMobilnummer);
+  const hatMail = !!k.email;
+  const hatWhatsapp = !!mobil;
+
+  document.getElementById('sendTitel').textContent = k.name;
+  document.getElementById('sendSchrittKontakt').style.display = 'none';
+  document.getElementById('sendSchrittKanal').style.display = 'block';
+
+  const anzahl = selectedDocIds.size;
+  let html = `<div style="font-size:13px;color:var(--grau);margin:0 0 16px;">${anzahl} ${anzahl===1?'Dokument':'Dokumente'} an <b style="color:var(--anthrazit);">${k.name}</b></div>`;
+
+  if(hatMail){
+    html += `
+      <button class="send-choice-btn" onclick="sendeAnKontakt('mail')">
+        <span style="font-size:19px;">✉️</span>
+        <span><div style="font-weight:600;font-size:14px;">Per E-Mail senden</div><div style="font-size:12px;color:var(--grau);margin-top:2px;">${k.email}</div></span>
+      </button>
+      <div class="send-hint">Die Adresse wird vor dem Teilen kopiert, falls deine Mail-App den Empfänger nicht automatisch übernimmt.</div>
+    `;
+  }
+  if(hatWhatsapp){
+    html += `
+      <button class="send-choice-btn" onclick="sendeAnKontakt('whatsapp')">
+        <span style="font-size:19px;">💬</span>
+        <span><div style="font-weight:600;font-size:14px;">Per WhatsApp senden</div><div style="font-size:12px;color:var(--grau);margin-top:2px;">${mobil.nummer}</div></span>
+      </button>
+    `;
+  }
+  if(!hatMail && !hatWhatsapp){
+    html += `<div class="empty" style="padding:20px 0;">Für diesen Kontakt ist weder eine E-Mail-Adresse noch eine Mobilnummer hinterlegt.</div>`;
+  }
+  document.getElementById('sendKanalBody').innerHTML = html;
+}
+function sendZurueckZuKontakt(){
+  document.getElementById('sendSchrittKanal').style.display = 'none';
+  document.getElementById('sendSchrittKontakt').style.display = 'block';
+  document.getElementById('sendTitel').textContent = 'Empfänger wählen';
+}
+
+async function sendeAnKontakt(kanal){
+  const k = sendGewaehlterKontakt;
+  const ids = Array.from(selectedDocIds);
+  if(!k || ids.length === 0) return;
+  try{
+    await ensureToken();
+    const files = [];
+    const namen = [];
+    for(const id of ids){
+      const d = docCache[id];
+      if(!d) continue;
+      namen.push(d.name);
+      const mimeType = mimeTypeFromFilename(d.name) || (d.file && d.file.mimeType) || 'application/octet-stream';
+      const res = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${id}/content`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if(!res.ok) throw new Error(`Download-Fehler ${res.status}`);
+      const blob = await res.blob();
+      files.push(new File([blob], d.name, { type: mimeType }));
+    }
+
+    if(kanal === 'mail' && k.email){
+      try{ await navigator.clipboard.writeText(k.email); }catch(e){ /* Zwischenablage optional */ }
+    }
+
+    if(navigator.canShare && navigator.canShare({ files })){
+      await navigator.share({ files, title: `Unterlagen für ${k.name}` });
+    } else if(navigator.share){
+      await navigator.share({ title: `Unterlagen für ${k.name}` });
+    } else {
+      alert('Dieses Gerät unterstützt keine Teilen-Funktion.');
+      return;
+    }
+
+    versandLogEintragen(namen, k.name, kanal);
+    selectedDocIds.clear();
+    document.querySelectorAll('.doc-check.on').forEach(el => { el.classList.remove('on'); el.textContent = ''; });
+    updateSendBar();
+    closeSendOverlay();
+  }catch(err){
+    if(err.name !== 'AbortError'){ // Abbruch durch Nutzer selbst ist kein Fehler
+      alert('Dokumente konnten nicht versendet werden: ' + err.message);
+    }
+  }
+}
+
+// ====== VERSAND-LOG (kurze Übersicht je Fall, wer wann was erhalten hat) ======
+function ladeVersandLog(){
+  try{ return JSON.parse(localStorage.getItem('thanato_versandlog') || '{}'); }
+  catch(e){ return {}; }
+}
+function speichereVersandLog(obj){
+  localStorage.setItem('thanato_versandlog', JSON.stringify(obj));
+}
+function versandLogEintragen(dateinamen, kontaktName, kanal){
+  if(!currentDetailItemId) return;
+  const key = 'fall-' + currentDetailItemId;
+  const log = ladeVersandLog();
+  if(!log[key]) log[key] = [];
+  const kanalText = kanal === 'mail' ? 'E-Mail' : 'WhatsApp';
+  const dateiText = dateinamen.length > 1 ? (dateinamen.length + ' Dokumente') : (dateinamen[0] || 'Dokument');
+  log[key].unshift({
+    text: `${dateiText} an ${kontaktName} gesendet (${kanalText})`,
+    datum: new Date().toLocaleDateString('de-DE')
+  });
+  speichereVersandLog(log);
+  renderVersandLog();
+}
+function renderVersandLog(){
+  if(!currentDetailItemId) return;
+  const box = document.getElementById('versandLog');
+  if(!box) return;
+  const log = ladeVersandLog()['fall-' + currentDetailItemId] || [];
+  box.innerHTML = log.length ? log.map(e => `
+    <div class="versand-log-item"><div class="dot"></div><div>${e.text}<span>${e.datum}</span></div></div>
+  `).join('') : '<div class="empty" style="padding:14px 0;font-size:12.5px;">Noch keine Unterlagen versendet.</div>';
 }
 
 function excelSerialToDate(serial){
@@ -834,6 +1047,20 @@ async function openKontakte(){
   const listEl = document.getElementById('kontakteList');
   listEl.innerHTML = '<div class="loading">Lade Kontakte …</div>';
   try{
+    await ladeKontakteInCache();
+  }catch(err){
+    listEl.innerHTML = `<div class="error-box">Kontakte konnten nicht geladen werden: ${err.message}</div>`;
+    return;
+  }
+  renderKontakte();
+}
+
+// Lädt Pfarrer/Einrichtungen aus der Excel-Datei + lokale Kontakte + Überschreibungen
+// in kontakteCache. Ausgelagert aus openKontakte(), damit auch die Empfänger-Auswahl
+// beim Versenden von Unterlagen dieselben Kontakte nutzen kann, ohne das Kontakte-Overlay
+// zu öffnen.
+async function ladeKontakteInCache(){
+  {
     const result = [];
 
     if(anyFileId){
@@ -890,11 +1117,7 @@ async function openKontakte(){
     merged = merged.map(k => katUmbenennung[k.kat] ? { ...k, kat: katUmbenennung[k.kat] } : k);
 
     kontakteCache = merged;
-  }catch(err){
-    listEl.innerHTML = `<div class="error-box">Kontakte konnten nicht geladen werden: ${err.message}</div>`;
-    return;
   }
-  renderKontakte();
 }
 
 function renderKontakte(){
@@ -1442,6 +1665,9 @@ async function openDetail(itemId){
   if(!cached) return;
   let { file, info, baseName, displayName } = cached;
 
+  currentDetailItemId = itemId;
+  selectedDocIds.clear();
+
   document.getElementById('dName').textContent = displayName;
   document.getElementById('dNotizBtn').innerHTML = notizBtnHtml('fall-'+itemId, displayName);
   const body = document.getElementById('dBody');
@@ -1515,7 +1741,10 @@ async function openDetail(itemId){
     </a>
     <div class="section-label">Unterlagen (Scan-Ordner)</div>
     <div id="scanDocs" class="loading">Lade Dokumente …</div>
+    <div class="section-label">Versand-Verlauf</div>
+    <div id="versandLog"></div>
   `;
+  renderVersandLog();
 
   try{
     // Unterlagen-Ordner werden "Rufname Familienname" benannt (anders als die Excel-Datei,
@@ -1530,15 +1759,23 @@ async function openDetail(itemId){
       const docsData = await graphGet(`/me/drive/items/${match.id}/children`);
       const docs = docsData.value || [];
       docs.forEach(d => { docCache[d.id] = d; });
-      scanBox.outerHTML = docs.length ? docs.map(d => `
-        <div class="doc" style="border:1px solid var(--line);">
-          <div><div class="doc-name">${d.name}</div><div class="doc-meta">${(d.size/1024).toFixed(0)} KB</div></div>
-          <div style="display:flex;gap:6px;flex-shrink:0;">
-            <button class="send-btn" style="border:none;cursor:pointer;" onclick="openScanDoc('${d.id}')">Öffnen</button>
-            <button class="send-btn" style="border:none;cursor:pointer;background:var(--gold);color:var(--anthrazit);" onclick="shareScanDoc('${d.id}')">Senden</button>
+      scanBox.outerHTML = docs.length ? `
+        ${docs.map(d => `
+          <div class="doc" style="border:1px solid var(--line);">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+              <div class="doc-check" id="chk-${d.id}" onclick="toggleDocSelect('${d.id}', this)"></div>
+              <div style="min-width:0;"><div class="doc-name">${d.name}</div><div class="doc-meta">${(d.size/1024).toFixed(0)} KB</div></div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button class="send-btn" style="border:none;cursor:pointer;" onclick="openScanDoc('${d.id}')">Öffnen</button>
+              <button class="send-btn" style="border:none;cursor:pointer;background:var(--gold);color:var(--anthrazit);" onclick="shareScanDoc('${d.id}')">Senden</button>
+            </div>
           </div>
+        `).join('')}
+        <div class="send-bar" id="sendBar">
+          <button onclick="openSendOverlay()">An Kontakt senden (<span id="sendBarCount">0</span>)</button>
         </div>
-      `).join('') : '<div class="empty" style="padding:20px 0;">Ordner ist leer.</div>';
+      ` : '<div class="empty" style="padding:20px 0;">Ordner ist leer.</div>';
     } else {
       scanBox.outerHTML = `<div class="empty" style="padding:20px 0;">Kein passender Unterlagen-Ordner ("Unterlagen ${folderSearchName}") gefunden.</div>`;
     }
