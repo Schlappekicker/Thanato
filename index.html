@@ -856,7 +856,13 @@ function uebersichtWert(cell){
   if(!cell || cell.v === undefined || cell.v === null) return '';
   let d = null;
   if(cell.t === 'd') d = new Date(cell.v);
-  else if(cell.t === 'n' && cell.v > 20000 && cell.v < 80000 && cell.z && /[dmy]/i.test(cell.z)) d = excelSerialToDate(cell.v);
+  else if(cell.t === 'n' && cell.v > 20000 && cell.v < 80000){
+    // SheetJS liefert das Zahlenformat (z) nur auf Wunsch; sonst steht der amerikanisch formatierte
+    // Anzeigetext in w (z.B. "11/2/26"). Beides gilt als Hinweis auf eine Datumszelle.
+    const hatDatumsFormat = (cell.z && /[dmy]/i.test(cell.z)) ||
+                            (cell.w && /^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}$/.test(String(cell.w).trim()));
+    if(hatDatumsFormat) d = excelSerialToDate(cell.v);
+  }
   if(d && !isNaN(d)){
     return String(d.getUTCDate()).padStart(2,'0') + '/' + String(d.getUTCMonth()+1).padStart(2,'0') + '/' + d.getUTCFullYear();
   }
@@ -1660,7 +1666,7 @@ function openUebersicht(itemId){
         </div>
       `).join('')}
     `).join('')}
-    <div style="text-align:center;font-size:10.5px;color:var(--grau);margin-top:14px;">App-Stand: 06.11.2026 · Datumsformat TT/MM/JJJJ</div>
+    <div style="text-align:center;font-size:10.5px;color:var(--grau);margin-top:14px;">App-Stand: 06.11.2026 (2) · Datumsformat TT/MM/JJJJ</div>
   `;
   document.getElementById('apOverlay').classList.add('open');
 }
