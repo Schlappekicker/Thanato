@@ -1135,8 +1135,8 @@ function selectTab(name, btnEl){
 // Archiv-Jahre und Vorsorgen ändern sich praktisch nie -> einmal lesen, dann merken.
 // Der aktuelle Jahresordner wird immer per Änderungsdatum abgeglichen.
 // v2: Kinder-Erkennung korrigiert (Ehepartner stand fälschlich unter Kinder) -> alten Zwischenspeicher verwerfen
-const CACHE_KEY = 'thanato_cache_v6';
-try{ ['thanato_cache_v1','thanato_cache_v2','thanato_cache_v3','thanato_cache_v4','thanato_cache_v5'].forEach(k => localStorage.removeItem(k)); }catch(e){}
+const CACHE_KEY = 'thanato_cache_v7';
+try{ ['thanato_cache_v1','thanato_cache_v2','thanato_cache_v3','thanato_cache_v4','thanato_cache_v5','thanato_cache_v6'].forEach(k => localStorage.removeItem(k)); }catch(e){}
 function loadDiskCache(){
   try{ return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }catch(e){ return {}; }
 }
@@ -1666,7 +1666,7 @@ function openUebersicht(itemId){
         </div>
       `).join('')}
     `).join('')}
-    <div style="text-align:center;font-size:10.5px;color:var(--grau);margin-top:14px;">App-Stand: 06.11.2026 (2) · Datumsformat TT/MM/JJJJ</div>
+    <div style="text-align:center;font-size:10.5px;color:var(--grau);margin-top:14px;">App-Stand: 06.11.2026 (3) · Datumsformat TT/MM/JJJJ</div>
   `;
   document.getElementById('apOverlay').classList.add('open');
 }
