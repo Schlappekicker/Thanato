@@ -850,6 +850,91 @@ function extractChildren(sheet, kindRow, apRow){
   return children;
 }
 
+// ====== EHEPARTNER + TERMINE AUSLESEN ======
+// Der Ehegatte-Block steht zwischen der ersten "Familienstand"-Überschrift (Spalte A) und der
+// Kinder-Überschrift. Felder werden über ihre Beschriftung gefunden (nicht über feste Zeilenabstände).
+function extractSpouse(sheet, kindRow){
+  const famRow = findRowOfLabelInColA(sheet, 'Familienstand');
+  if(famRow < 0 || kindRow < 0 || kindRow <= famRow) return null;
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  function val(labels){
+    for(let r = famRow; r < kindRow; r++){
+      for(let c = range.s.c; c <= range.e.c; c++){
+        const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+        if(cell && typeof cell.v === 'string' && labels.includes(cell.v.trim())){
+          const v = valueNear(sheet, r, c);
+          if(v) return v;
+        }
+      }
+    }
+    return '';
+  }
+  const vorname = val(['Vorname']);
+  const nachname = val(['Nachname', 'Familienname']);
+  const name = [vorname, nachname].filter(Boolean).join(' ').trim();
+  if(!name || name.length < 2 || !/[a-zA-ZäöüÄÖÜß]/.test(name)) return null;
+  const strasse = val(['Straße', 'Strasse']);
+  const plzOrt = val(['PLZ/ Ort', 'PLZ/Ort', 'PLZ    Ort']);
+  return {
+    name,
+    anrede: val(['Anrede']),
+    telefon: val(['Telefon']),
+    email: val(['E_Mail', 'E-Mail']),
+    adresse: [strasse, plzOrt].filter(Boolean).join(', '),
+    verstorben: val(['Wenn bereits verst. wann und wo:'])
+  };
+}
+
+// Uhrzeit neben dem Datum: Text "15:00" oder Excel-Zeitwert (Bruchteil eines Tages)
+function timeFromCell(cell){
+  if(!cell || cell.v === undefined || cell.v === null) return '';
+  if(cell.t === 'n' && cell.v >= 0 && cell.v < 1){
+    const mins = Math.round(cell.v * 24 * 60);
+    return String(Math.floor(mins/60)).padStart(2,'0') + ':' + String(mins%60).padStart(2,'0');
+  }
+  const t = String(cell.v).trim();
+  return /^\d{1,2}[:.]\d{2}/.test(t) ? t.replace('.', ':') : '';
+}
+
+// Termine: normal steht eine Zeile "Trauerfeier" (Trauerfeier + Beisetzung am selben Tag);
+// bei abweichenden Tagen stehen "Trauerfeier am:" und "Beisetzung am" in eigenen Zeilen.
+function extractTermine(sheet){
+  if(!sheet['!ref']) return [];
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const defs = [
+    { label: 'Trauerfeier am:', anzeige: 'Trauerfeier' },
+    { label: 'Beisetzung am', anzeige: 'Beisetzung' },
+    { label: 'Trauerfeier', anzeige: 'Trauerfeier / Beisetzung' }
+  ];
+  const termine = [];
+  for(const d of defs){
+    let gefunden = null;
+    for(let r = range.s.r; r <= range.e.r && !gefunden; r++){
+      for(let c = range.s.c; c <= range.e.c; c++){
+        const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+        if(cell && typeof cell.v === 'string' && cell.v.trim() === d.label){
+          let datum = '';
+          for(let off = 1; off <= 4 && !datum; off++){
+            const dc = sheet[XLSX.utils.encode_cell({ r, c: c + off })];
+            const v = dateFromCell(dc);
+            if(v && /\d/.test(v)) datum = v;
+          }
+          if(datum){
+            let zeit = '';
+            for(let off = 1; off <= 8 && !zeit; off++){
+              zeit = timeFromCell(sheet[XLSX.utils.encode_cell({ r, c: c + off })]);
+            }
+            gefunden = { art: d.anzeige, datum, zeit };
+            break;
+          }
+        }
+      }
+    }
+    if(gefunden) termine.push(gefunden);
+  }
+  return termine;
+}
+
 async function readFragebData(itemId){
   if(typeof XLSX === 'undefined') return null;
   try{
@@ -875,11 +960,15 @@ async function readFragebData(itemId){
       einrichtung: findByLabel(sheet,'In Einrichtung gestorben?'),
       todesort: findByLabel(sheet,'Todesort'),
       ansprechpartner: '', telefon: '', email: '', apAnrede: '', apVerhaeltnis: '', apAdresse: '',
-      kinder: []
+      kinder: [],
+      ehepartner: null,
+      termine: []
     };
     const kindRow = findKinderHeaderRow(sheet);
     const apRow = findRowOfLabel(sheet, 'Ansprechpartner');
     result.kinder = extractChildren(sheet, kindRow, apRow);
+    result.ehepartner = extractSpouse(sheet, kindRow);
+    result.termine = extractTermine(sheet);
     if(apRow >= 0){
       const apVorname = findByLabelAfterRow(sheet,'Rufname',apRow) || findByLabelAfterRow(sheet,'Vorname',apRow);
       const apNachname = findByLabelAfterRow(sheet,'Familienname',apRow) || findByLabelAfterRow(sheet,'Nachname',apRow);
@@ -949,8 +1038,8 @@ function selectTab(name, btnEl){
 // Archiv-Jahre und Vorsorgen ändern sich praktisch nie -> einmal lesen, dann merken.
 // Der aktuelle Jahresordner wird immer per Änderungsdatum abgeglichen.
 // v2: Kinder-Erkennung korrigiert (Ehepartner stand fälschlich unter Kinder) -> alten Zwischenspeicher verwerfen
-const CACHE_KEY = 'thanato_cache_v2';
-try{ localStorage.removeItem('thanato_cache_v1'); }catch(e){}
+const CACHE_KEY = 'thanato_cache_v3';
+try{ localStorage.removeItem('thanato_cache_v1'); localStorage.removeItem('thanato_cache_v2'); }catch(e){}
 function loadDiskCache(){
   try{ return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }catch(e){ return {}; }
 }
@@ -1446,6 +1535,19 @@ function openAnsprechpartner(itemId){
   }, 'person-' + itemId + '-ansprechpartner');
 }
 
+function openEhepartnerDetail(itemId){
+  const cached = fileCache[itemId];
+  if(!cached || !cached.info || !cached.info.ehepartner) return;
+  const e = cached.info.ehepartner;
+  openPersonCard({
+    name: [e.anrede, e.name].filter(Boolean).join(' '),
+    verhaeltnis: 'Ehepartner' + (e.verstorben ? ' (verstorben ' + e.verstorben + ')' : ''),
+    adresse: e.adresse,
+    telefon: e.telefon,
+    email: e.email
+  }, 'person-' + itemId + '-ehepartner');
+}
+
 function openKindDetail(itemId, index){
   const cached = fileCache[itemId];
   if(!cached || !cached.info || !cached.info.kinder[index]) return;
@@ -1720,12 +1822,22 @@ async function openDetail(itemId){
   let fieldsHtml = '';
   let apHtml = '';
   let kinderHtml = '';
+  let ehepartnerHtml = '';
   if(info){
     if(info.ansprechpartner || info.telefon || info.email){
       apHtml = `
         <div class="section-label">Ansprechpartner</div>
         <button class="doc" onclick="openAnsprechpartner('${itemId}')" style="width:100%;text-align:left;border:1px solid var(--gold-soft);">
           <div><div class="doc-name">${info.ansprechpartner || 'Ansprechpartner'}</div><div class="doc-meta">Kontaktdaten ansehen</div></div>
+          <span class="send-btn">Öffnen</span>
+        </button>
+      `;
+    }
+    if(info.ehepartner){
+      ehepartnerHtml = `
+        <div class="section-label">Ehepartner</div>
+        <button class="doc" onclick="openEhepartnerDetail('${itemId}')" style="width:100%;text-align:left;border:1px solid var(--line);">
+          <div><div class="doc-name">${info.ehepartner.name}</div><div class="doc-meta">${info.ehepartner.verstorben ? 'verstorben ' + info.ehepartner.verstorben : 'Kontaktdaten ansehen'}</div></div>
           <span class="send-btn">Öffnen</span>
         </button>
       `;
@@ -1741,7 +1853,9 @@ async function openDetail(itemId){
         `).join('')}
       `;
     }
+    const terminRows = (info.termine || []).map(t => [t.art, t.datum + (t.zeit ? ', ' + t.zeit + ' Uhr' : '')]);
     const rows = [
+      ...terminRows,
       ['Sterbedatum', info.sterbedatum],
       ['Todesart', info.todesart],
       ['Klinik/Einrichtung', info.einrichtung],
@@ -1761,6 +1875,7 @@ async function openDetail(itemId){
 
   body.innerHTML = `
     ${apHtml}
+    ${ehepartnerHtml}
     ${kinderHtml}
     ${fieldsHtml}
     <a class="doc" href="${file.webUrl}" target="_blank" rel="noopener">
