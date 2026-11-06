@@ -696,6 +696,27 @@ function findRowOfLabel(sheet, label){
   return -1;
 }
 
+// Die echte Kinder-Überschrift ist die Zeile, in der "Kind 1" und "Kind 2" nebeneinander stehen.
+// Ein einzelnes "Kind 1" kann auch an anderer Stelle vorkommen (z.B. Hilfszelle weiter oben,
+// Auswahlfeld beim Ansprechpartner) und darf nicht als Beginn des Kinder-Bereichs gelten.
+function findKinderHeaderRow(sheet){
+  if(!sheet['!ref']) return -1;
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  for(let r = range.s.r; r <= range.e.r; r++){
+    let has1 = false, has2 = false;
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      if(cell && typeof cell.v === 'string'){
+        const v = cell.v.trim();
+        if(v === 'Kind 1') has1 = true;
+        if(v === 'Kind 2') has2 = true;
+      }
+    }
+    if(has1 && has2) return r;
+  }
+  return findRowOfLabel(sheet, 'Kind 1');
+}
+
 function findByLabelAfterRow(sheet, label, minRow){
   if(!sheet['!ref']) return '';
   const range = XLSX.utils.decode_range(sheet['!ref']);
@@ -744,7 +765,7 @@ function buildSearchIndex(sheet){
   if(!sheet['!ref']) return [];
   const range = XLSX.utils.decode_range(sheet['!ref']);
   const familienstandRow = findRowOfLabelInColA(sheet,'Familienstand');
-  const kindRow = findRowOfLabel(sheet,'Kind 1');
+  const kindRow = findKinderHeaderRow(sheet);
   const apRow = findRowOfLabel(sheet,'Ansprechpartner');
   const friedhofRow = findRowOfLabel(sheet,'Friedhof');
   const einrichtungRow = findRowOfLabel(sheet,'In Einrichtung gestorben?');
@@ -856,7 +877,7 @@ async function readFragebData(itemId){
       ansprechpartner: '', telefon: '', email: '', apAnrede: '', apVerhaeltnis: '', apAdresse: '',
       kinder: []
     };
-    const kindRow = findRowOfLabel(sheet, 'Kind 1');
+    const kindRow = findKinderHeaderRow(sheet);
     const apRow = findRowOfLabel(sheet, 'Ansprechpartner');
     result.kinder = extractChildren(sheet, kindRow, apRow);
     if(apRow >= 0){
