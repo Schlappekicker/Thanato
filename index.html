@@ -850,6 +850,48 @@ function extractChildren(sheet, kindRow, apRow){
   return children;
 }
 
+// ====== FALLÜBERSICHT AUSLESEN ======
+// Block rechts oben im Fragebogen: Überschrift "Fallübersicht ...", darunter Zeilen mit
+// Beschriftung | Status (✓ erledigt / ○ offen) | Wert (z.B. Datum). Abschnittsüberschriften haben keinen Status.
+function extractFallUebersicht(sheet){
+  if(!sheet['!ref']) return null;
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  let r0 = -1, c0 = -1;
+  for(let r = range.s.r; r <= range.e.r && r0 < 0; r++){
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+      if(cell && typeof cell.v === 'string' && cell.v.trim().startsWith('Fallübersicht')){ r0 = r; c0 = c; break; }
+    }
+  }
+  if(r0 < 0) return null;
+  const abschnitte = [];
+  let aktuell = null;
+  for(let r = r0 + 1; r <= Math.min(r0 + 40, range.e.r); r++){
+    const labelCell = sheet[XLSX.utils.encode_cell({ r, c: c0 })];
+    if(!labelCell || typeof labelCell.v !== 'string' || !labelCell.v.trim()) continue;
+    const label = labelCell.v.trim();
+    if(label.startsWith('Erledigt:')) continue;          // Fortschrittszeile berechnen wir selbst
+    if(label.startsWith('Mail-Buttons')) break;           // Hinweiszeile = Ende des Blocks
+    const status = formatCell(sheet[XLSX.utils.encode_cell({ r, c: c0 + 1 })]);
+    if(!status){                                          // Abschnittsüberschrift
+      aktuell = { titel: label.replace(/\s*\(.*\)\s*$/, ''), items: [] };
+      abschnitte.push(aktuell);
+      continue;
+    }
+    if(!aktuell){ aktuell = { titel: '', items: [] }; abschnitte.push(aktuell); }
+    aktuell.items.push({
+      label,
+      status: status === '✓' ? 'ok' : (status === '○' ? 'offen' : 'unklar'),
+      wert: formatCell(sheet[XLSX.utils.encode_cell({ r, c: c0 + 2 })])
+    });
+  }
+  const alle = abschnitte.flatMap(a => a.items);
+  const erledigt = alle.filter(i => i.status === 'ok').length;
+  const gesamt = erledigt + alle.filter(i => i.status === 'offen').length;
+  if(!alle.length) return null;
+  return { abschnitte, erledigt, gesamt };
+}
+
 // ====== VERSTORBENE(R) AUSLESEN ======
 // Der Block "Daten Verstorbene/r" steht ganz oben, vor der ersten "Familienstand"-Überschrift in Spalte A.
 function extractDeceased(sheet){
@@ -995,7 +1037,8 @@ async function readFragebData(itemId){
       kinder: [],
       ehepartner: null,
       termine: [],
-      verstorben: {}
+      verstorben: {},
+      uebersicht: null
     };
     const kindRow = findKinderHeaderRow(sheet);
     const apRow = findRowOfLabel(sheet, 'Ansprechpartner');
@@ -1003,6 +1046,7 @@ async function readFragebData(itemId){
     result.ehepartner = extractSpouse(sheet, kindRow);
     result.termine = extractTermine(sheet);
     result.verstorben = extractDeceased(sheet);
+    result.uebersicht = extractFallUebersicht(sheet);
     if(apRow >= 0){
       const apVorname = findByLabelAfterRow(sheet,'Rufname',apRow) || findByLabelAfterRow(sheet,'Vorname',apRow);
       const apNachname = findByLabelAfterRow(sheet,'Familienname',apRow) || findByLabelAfterRow(sheet,'Nachname',apRow);
@@ -1072,8 +1116,8 @@ function selectTab(name, btnEl){
 // Archiv-Jahre und Vorsorgen ändern sich praktisch nie -> einmal lesen, dann merken.
 // Der aktuelle Jahresordner wird immer per Änderungsdatum abgeglichen.
 // v2: Kinder-Erkennung korrigiert (Ehepartner stand fälschlich unter Kinder) -> alten Zwischenspeicher verwerfen
-const CACHE_KEY = 'thanato_cache_v4';
-try{ ['thanato_cache_v1','thanato_cache_v2','thanato_cache_v3'].forEach(k => localStorage.removeItem(k)); }catch(e){}
+const CACHE_KEY = 'thanato_cache_v5';
+try{ ['thanato_cache_v1','thanato_cache_v2','thanato_cache_v3','thanato_cache_v4'].forEach(k => localStorage.removeItem(k)); }catch(e){}
 function loadDiskCache(){
   try{ return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }catch(e){ return {}; }
 }
@@ -1569,6 +1613,38 @@ function openAnsprechpartner(itemId){
   }, 'person-' + itemId + '-ansprechpartner');
 }
 
+function openUebersicht(itemId){
+  const cached = fileCache[itemId];
+  if(!cached || !cached.info || !cached.info.uebersicht) return;
+  const u = cached.info.uebersicht;
+  const prozent = u.gesamt ? Math.round(u.erledigt / u.gesamt * 100) : 0;
+  const symbol = st => st === 'ok' ? '<span style="color:#4c6b4f;font-weight:700;">✓</span>'
+                    : st === 'offen' ? '<span style="color:var(--gold);font-weight:700;">○</span>'
+                    : '<span style="color:var(--grau);">–</span>';
+  document.getElementById('apTitel').textContent = 'Fallübersicht';
+  document.getElementById('apBody').innerHTML = `
+    <div class="doc" style="cursor:default;display:block;">
+      <div class="doc-name-alt">Erledigt</div>
+      <div class="doc-meta-alt" style="font-size:15px;color:var(--anthrazit);font-weight:600;">${u.erledigt} von ${u.gesamt}</div>
+      <div style="height:8px;background:var(--line);border-radius:5px;margin-top:8px;overflow:hidden;">
+        <div style="height:100%;width:${prozent}%;background:var(--gold);"></div>
+      </div>
+    </div>
+    ${u.abschnitte.map(a => `
+      ${a.titel ? `<div class="section-label">${a.titel}</div>` : ''}
+      ${a.items.map(i => `
+        <div class="doc" style="cursor:default;">
+          <div style="display:flex;gap:10px;align-items:flex-start;">
+            <div style="width:18px;flex-shrink:0;text-align:center;">${symbol(i.status)}</div>
+            <div><div class="doc-name-alt" style="${i.status==='offen' ? 'color:var(--anthrazit);font-weight:600;' : ''}">${i.label}</div>${i.wert ? `<div class="doc-meta-alt">${i.wert}</div>` : ''}</div>
+          </div>
+        </div>
+      `).join('')}
+    `).join('')}
+  `;
+  document.getElementById('apOverlay').classList.add('open');
+}
+
 function openVerstorbenDetail(itemId){
   const cached = fileCache[itemId];
   if(!cached || !cached.info) return;
@@ -1896,6 +1972,7 @@ async function openDetail(itemId){
   let kinderHtml = '';
   let ehepartnerHtml = '';
   let verstorbenHtml = '';
+  let uebersichtHtml = '';
   if(info){
     if(info.ansprechpartner || info.telefon || info.email){
       apHtml = `
@@ -1912,6 +1989,15 @@ async function openDetail(itemId){
         <div class="section-label">Verstorbene(r)</div>
         <button class="doc" onclick="openVerstorbenDetail('${itemId}')" style="width:100%;text-align:left;border:1px solid var(--gold);">
           <div><div class="doc-name">${info.name}</div><div class="doc-meta">${kurz || 'Daten ansehen'}</div></div>
+          <span class="send-btn">Öffnen</span>
+        </button>
+      `;
+    }
+    if(info.uebersicht){
+      const u = info.uebersicht;
+      uebersichtHtml = `
+        <button class="doc" onclick="openUebersicht('${itemId}')" style="width:100%;text-align:left;border:1px solid var(--gold-soft);">
+          <div><div class="doc-name">Fallübersicht</div><div class="doc-meta">Erledigt: ${u.erledigt} von ${u.gesamt}</div></div>
           <span class="send-btn">Öffnen</span>
         </button>
       `;
@@ -1958,6 +2044,7 @@ async function openDetail(itemId){
 
   body.innerHTML = `
     ${verstorbenHtml}
+    ${uebersichtHtml}
     ${apHtml}
     ${ehepartnerHtml}
     ${kinderHtml}
