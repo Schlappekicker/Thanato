@@ -139,7 +139,7 @@
       </div>
       <div class="chips" id="chips"></div>
     </div>
-    <button class="kontakte-btn" onclick="openKontakte()">👤 Kontakte (Pfarrer, Einrichtungen, Friedhöfe, Floristen, ...)</button>
+    <button class="kontakte-btn" onclick="openKontakte()">👤 Kontakte (Pfarrer / Redner, Einrichtungen, Friedhöfe, Floristen, ...)</button>
     <div class="list" id="list">
       <div class="loading">Lade Daten aus OneDrive …</div>
     </div>
@@ -203,7 +203,7 @@
     <div class="detail-body">
       <label style="font-size:12.5px;color:var(--grau);">Kategorie</label>
       <select id="kfKat" style="width:100%;padding:11px 14px;border:1px solid var(--gold-soft);border-radius:10px;margin:6px 0 14px;font-size:14px;background:var(--weiss);">
-        <option value="Pfarrer">Pfarrer</option>
+        <option value="Pfarrer / Redner">Pfarrer / Redner</option>
         <option value="Trauerredner">Trauerredner</option>
         <option value="Kliniken">Kliniken</option>
         <option value="Seniorenzentren">Seniorenzentren</option>
@@ -1269,6 +1269,63 @@ async function openKontakte(){
   renderKontakte();
 }
 
+// ====== PFARRER-/REDNERLISTE (Blatt "Pfarrerliste") ======
+// Spalten werden über die Kopfzeile gefunden (Spalte1, Titel, Name, PLZ, Ort, Telefon, Konvention,
+// Gemeinde, E-Mail); fehlt eine Kopfzeile, gelten die bisherigen festen Spaltenpositionen.
+function parsePfarrerliste(sheet){
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 1 });
+  const kopf = (XLSX.utils.sheet_to_json(sheet, { header: 1, range: 0 })[0] || []).map(h => String(h || '').trim().toLowerCase());
+  const col = (namen, fallback) => { const i = kopf.findIndex(h => namen.includes(h)); return i >= 0 ? i : fallback; };
+  const cKurz = col(['spalte1','kurzname','kürzel'], 0), cTitel = col(['titel','funktion'], 1), cName = col(['name'], 2);
+  const cPlz = col(['plz'], 3), cOrt = col(['ort'], 4), cTel = col(['telefon','tel.','tel'], 5);
+  const cKonf = col(['konvention','konfession'], 7), cGem = col(['gemeinde'], 8), cMail = col(['e-mail','email','e_mail','mail'], 9);
+  const txt = v => (v === undefined || v === null) ? '' : String(v).trim();
+  const konfessionen = { ev: 'evangelisch', evang: 'evangelisch', kath: 'katholisch', rk: 'katholisch' };
+  const out = [];
+  rows.forEach((r, i) => {
+    if(!r) return;
+    const kurz = txt(r[cKurz]), titel = txt(r[cTitel]);
+    let name = txt(r[cName]);
+    if(!kurz && !titel && !name) return;
+    // Platzhalterzeilen der Auswahlliste ("ohne", "Pfarrer/in oder Redner") sind keine Personen
+    if(kurz.toLowerCase() === 'ohne' || /^ohne pfarrer/i.test(titel) || /^pfarrer\/in oder redner/i.test(titel)) return;
+    // Vollständiger Name: steht im Feld "Name" nur der Vorname, den Kurznamen (Nachname) anhängen
+    const letztesWort = kurz.split(/\s+/).pop().toLowerCase();
+    if(!name) name = kurz;
+    else if(letztesWort && !name.toLowerCase().includes(letztesWort)) name = name + ' ' + kurz;
+    if(!name) return;
+    const konf = txt(r[cKonf]);
+    out.push({
+      idx: i,
+      kurz,
+      titel,
+      name: [titel, name].filter(Boolean).join(' '),
+      ort: txt(r[cOrt]),
+      gemeinde: txt(r[cGem]),
+      telefon: txt(r[cTel]),
+      email: txt(r[cMail]),
+      konfession: konfessionen[konf.toLowerCase()] || konf
+    });
+  });
+  return out;
+}
+
+// Die Listen stehen in jeder Fall-Datei (Kopie der Master-Datei). Aktuell ist die Liste im zuletzt
+// angelegten Fall; zusätzlich wird der zuletzt bearbeitete Fall berücksichtigt (dort könnten neue
+// Einträge direkt ergänzt worden sein). Doppelte Einträge werden zusammengeführt.
+async function listenQuellen(){
+  try{
+    const d = await graphGet(`/me/drive/root:/${encPath('Sterbefälle/Sterbefälle ' + currentYear)}:/children`);
+    const f = (d.value || []).filter(x => x.file && /\.xlsm?$/i.test(x.name));
+    if(f.length){
+      const neuAngelegt = [...f].sort((a,b) => new Date(b.createdDateTime||0) - new Date(a.createdDateTime||0))[0];
+      const neuBearbeitet = [...f].sort((a,b) => new Date(b.lastModifiedDateTime||0) - new Date(a.lastModifiedDateTime||0))[0];
+      return [...new Set([neuAngelegt.id, neuBearbeitet.id])];
+    }
+  }catch(e){ /* Fallback unten */ }
+  return anyFileId ? [anyFileId] : [];
+}
+
 // Lädt Pfarrer/Einrichtungen aus der Excel-Datei + lokale Kontakte + Überschreibungen
 // in kontakteCache. Ausgelagert aus openKontakte(), damit auch die Empfänger-Auswahl
 // beim Versenden von Unterlagen dieselben Kontakte nutzen kann, ohne das Kontakte-Overlay
@@ -1277,28 +1334,33 @@ async function ladeKontakteInCache(){
   {
     const result = [];
 
-    if(anyFileId){
-      const buf = await fetchFileBuffer(anyFileId);
+    const quellen = await listenQuellen();
+    const gesehen = new Set();
+    for(let q = 0; q < quellen.length; q++){
+      const buf = await fetchFileBuffer(quellen[q]);
       const wb = XLSX.read(buf, { type: 'array' });
 
       if(wb.Sheets['Pfarrerliste']){
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets['Pfarrerliste'], { header:1, range:1 });
-        rows.forEach((r, i) => {
-          if(!r || !r[2]) return;
+        parsePfarrerliste(wb.Sheets['Pfarrerliste']).forEach(p => {
+          const key = (p.titel + '|' + p.name).toLowerCase();
+          if(gesehen.has(key)) return;
+          gesehen.add(key);
           result.push({
-            id: 'excel-pfarrer-' + i,
+            id: q === 0 ? 'excel-pfarrer-' + p.idx : 'excel-pfarrer-n-' + key.replace(/[^a-z0-9äöüß]+/g, '-'),
             quelle: 'excel',
-            kat:'Pfarrer',
-            name: [r[1], r[2]].filter(Boolean).join(' '),
-            ort: r[4] || '',
-            telefone: r[5] ? [{ nummer: String(r[5]), notiz: '' }] : [],
-            email: r[9] || '',
+            kat: 'Pfarrer / Redner',
+            name: p.name,
+            titel: p.titel,
+            gemeinde: p.gemeinde,
+            ort: p.ort,
+            telefone: p.telefon ? [{ nummer: p.telefon, notiz: '' }] : [],
+            email: p.email,
             adresse: '',
-            konfession: r[7] || ''
+            konfession: p.konfession
           });
         });
       }
-      if(wb.Sheets['Einrichtungen']){
+      if(q === 0 && wb.Sheets['Einrichtungen']){
         const rows = XLSX.utils.sheet_to_json(wb.Sheets['Einrichtungen'], { header:1, range:5 });
         rows.forEach((r, i) => {
           if(!r || !r[1]) return;
@@ -1327,7 +1389,7 @@ async function ladeKontakteInCache(){
     merged = merged.concat(ladeLokaleKontakte());
 
     // Alte Kategoriebezeichnungen auf die aktuellen Namen migrieren
-    const katUmbenennung = { 'Einrichtung':'Kliniken', 'Einrichtungen':'Kliniken', 'Florist':'Floristen', 'Friedhof':'Friedhöfe' };
+    const katUmbenennung = { 'Pfarrer':'Pfarrer / Redner', 'Einrichtung':'Kliniken', 'Einrichtungen':'Kliniken', 'Florist':'Floristen', 'Friedhof':'Friedhöfe' };
     merged = merged.map(k => katUmbenennung[k.kat] ? { ...k, kat: katUmbenennung[k.kat] } : k);
 
     kontakteCache = merged;
@@ -1384,6 +1446,8 @@ function openKontaktDetail(id){
 
   const rows = [
     ['Kategorie', k.kat + (k.ort ? ' · '+k.ort : '')],
+    ['Funktion', k.titel],
+    ['Gemeinde', k.gemeinde],
     ['Konfession', k.konfession]
   ].filter(([,v]) => v);
 
