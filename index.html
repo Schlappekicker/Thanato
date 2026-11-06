@@ -159,7 +159,7 @@
   <div class="overlay" id="apOverlay" style="z-index:20;">
     <div class="detail-header">
       <button class="back" onclick="closeAnsprechpartner()">← Zurück</button>
-      <div class="case-name">Ansprechpartner</div>
+      <div class="case-name" id="apTitel">Ansprechpartner</div>
     </div>
     <div class="detail-body" id="apBody"></div>
   </div>
@@ -850,6 +850,38 @@ function extractChildren(sheet, kindRow, apRow){
   return children;
 }
 
+// ====== VERSTORBENE(R) AUSLESEN ======
+// Der Block "Daten Verstorbene/r" steht ganz oben, vor der ersten "Familienstand"-Überschrift in Spalte A.
+function extractDeceased(sheet){
+  const famRow = findRowOfLabelInColA(sheet, 'Familienstand');
+  if(!sheet['!ref'] || famRow < 0) return {};
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const norm = t => String(t).trim().replace(/\s+/g, ' ');
+  function val(labels){
+    for(let r = range.s.r; r < famRow; r++){
+      for(let c = range.s.c; c <= range.e.c; c++){
+        const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+        if(cell && typeof cell.v === 'string' && labels.includes(norm(cell.v))){
+          const v = valueNear(sheet, r, c);
+          if(v) return v;
+        }
+      }
+    }
+    return '';
+  }
+  const strasse = val(['Straße', 'Strasse']);
+  const plzOrt = val(['PLZ Ort', 'PLZ/ Ort', 'PLZ/Ort']);
+  return {
+    anrede: val(['Anrede']),
+    geburtsort: val(['Geb. Ort']),
+    adresse: [strasse, plzOrt].filter(Boolean).join(', '),
+    beruf: val(['Beruf']),
+    konfession: val(['Konfession']),
+    staatsangehoerigkeit: val(['Staatsangehörigkeit']),
+    familienstand: val(['Familienstand'])
+  };
+}
+
 // ====== EHEPARTNER + TERMINE AUSLESEN ======
 // Der Ehegatte-Block steht zwischen der ersten "Familienstand"-Überschrift (Spalte A) und der
 // Kinder-Überschrift. Felder werden über ihre Beschriftung gefunden (nicht über feste Zeilenabstände).
@@ -962,13 +994,15 @@ async function readFragebData(itemId){
       ansprechpartner: '', telefon: '', email: '', apAnrede: '', apVerhaeltnis: '', apAdresse: '',
       kinder: [],
       ehepartner: null,
-      termine: []
+      termine: [],
+      verstorben: {}
     };
     const kindRow = findKinderHeaderRow(sheet);
     const apRow = findRowOfLabel(sheet, 'Ansprechpartner');
     result.kinder = extractChildren(sheet, kindRow, apRow);
     result.ehepartner = extractSpouse(sheet, kindRow);
     result.termine = extractTermine(sheet);
+    result.verstorben = extractDeceased(sheet);
     if(apRow >= 0){
       const apVorname = findByLabelAfterRow(sheet,'Rufname',apRow) || findByLabelAfterRow(sheet,'Vorname',apRow);
       const apNachname = findByLabelAfterRow(sheet,'Familienname',apRow) || findByLabelAfterRow(sheet,'Nachname',apRow);
@@ -1038,8 +1072,8 @@ function selectTab(name, btnEl){
 // Archiv-Jahre und Vorsorgen ändern sich praktisch nie -> einmal lesen, dann merken.
 // Der aktuelle Jahresordner wird immer per Änderungsdatum abgeglichen.
 // v2: Kinder-Erkennung korrigiert (Ehepartner stand fälschlich unter Kinder) -> alten Zwischenspeicher verwerfen
-const CACHE_KEY = 'thanato_cache_v3';
-try{ localStorage.removeItem('thanato_cache_v1'); localStorage.removeItem('thanato_cache_v2'); }catch(e){}
+const CACHE_KEY = 'thanato_cache_v4';
+try{ ['thanato_cache_v1','thanato_cache_v2','thanato_cache_v3'].forEach(k => localStorage.removeItem(k)); }catch(e){}
 function loadDiskCache(){
   try{ return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }catch(e){ return {}; }
 }
@@ -1535,6 +1569,43 @@ function openAnsprechpartner(itemId){
   }, 'person-' + itemId + '-ansprechpartner');
 }
 
+function openVerstorbenDetail(itemId){
+  const cached = fileCache[itemId];
+  if(!cached || !cached.info) return;
+  const i = cached.info;
+  const v = i.verstorben || {};
+  const geb = [i.geburtsdatum, v.geburtsort ? 'in ' + v.geburtsort : ''].filter(Boolean).join(' ');
+  const gest = [i.sterbedatum, i.todesart ? '(' + i.todesart + ')' : ''].filter(Boolean).join(' ');
+  const zeilen = [
+    ['Geboren', geb],
+    ['Gestorben', gest],
+    ['Familienstand', v.familienstand],
+    ['Beruf', v.beruf],
+    ['Konfession', v.konfession],
+    ['Staatsangehörigkeit', v.staatsangehoerigkeit]
+  ].filter(([,x]) => x);
+  const name = [v.anrede, i.name].filter(Boolean).join(' ');
+  document.getElementById('apTitel').textContent = 'Verstorbene(r)';
+  document.getElementById('apBody').innerHTML = `
+    <div class="doc" style="cursor:default;">
+      <div><div class="doc-name-alt">Name</div><div class="doc-meta-alt">${name || '–'}</div></div>
+      ${notizBtnHtml('person-' + itemId + '-verstorben', i.name)}
+    </div>
+    ${v.adresse ? `
+      <a class="doc" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.adresse)}">
+        <div><div class="doc-name-alt">Letzte Anschrift</div><div class="doc-meta-alt">${v.adresse}</div></div>
+        <span class="send-btn">📍 Route</span>
+      </a>
+    ` : ''}
+    ${zeilen.map(([l,x]) => `
+      <div class="doc" style="cursor:default;">
+        <div><div class="doc-name-alt">${l}</div><div class="doc-meta-alt">${x}</div></div>
+      </div>
+    `).join('')}
+  `;
+  document.getElementById('apOverlay').classList.add('open');
+}
+
 function openEhepartnerDetail(itemId){
   const cached = fileCache[itemId];
   if(!cached || !cached.info || !cached.info.ehepartner) return;
@@ -1545,7 +1616,7 @@ function openEhepartnerDetail(itemId){
     adresse: e.adresse,
     telefon: e.telefon,
     email: e.email
-  }, 'person-' + itemId + '-ehepartner');
+  }, 'person-' + itemId + '-ehepartner', 'Ehepartner');
 }
 
 function openKindDetail(itemId, index){
@@ -1558,10 +1629,11 @@ function openKindDetail(itemId, index){
     adresse: kind.adresse,
     telefon: kind.telefon,
     email: kind.email
-  }, 'person-' + itemId + '-kind-' + index);
+  }, 'person-' + itemId + '-kind-' + index, 'Kind');
 }
 
-function openPersonCard(person, notizKey){
+function openPersonCard(person, notizKey, titel){
+  document.getElementById('apTitel').textContent = titel || 'Ansprechpartner';
   const body = document.getElementById('apBody');
   body.innerHTML = `
     <div class="doc" style="cursor:default;">
@@ -1823,12 +1895,23 @@ async function openDetail(itemId){
   let apHtml = '';
   let kinderHtml = '';
   let ehepartnerHtml = '';
+  let verstorbenHtml = '';
   if(info){
     if(info.ansprechpartner || info.telefon || info.email){
       apHtml = `
         <div class="section-label">Ansprechpartner</div>
         <button class="doc" onclick="openAnsprechpartner('${itemId}')" style="width:100%;text-align:left;border:1px solid var(--gold-soft);">
           <div><div class="doc-name">${info.ansprechpartner || 'Ansprechpartner'}</div><div class="doc-meta">Kontaktdaten ansehen</div></div>
+          <span class="send-btn">Öffnen</span>
+        </button>
+      `;
+    }
+    if(info.name){
+      const kurz = [info.geburtsdatum ? 'geb. ' + info.geburtsdatum : '', info.sterbedatum ? 'gest. ' + info.sterbedatum : ''].filter(Boolean).join(' · ');
+      verstorbenHtml = `
+        <div class="section-label">Verstorbene(r)</div>
+        <button class="doc" onclick="openVerstorbenDetail('${itemId}')" style="width:100%;text-align:left;border:1px solid var(--gold);">
+          <div><div class="doc-name">${info.name}</div><div class="doc-meta">${kurz || 'Daten ansehen'}</div></div>
           <span class="send-btn">Öffnen</span>
         </button>
       `;
@@ -1874,6 +1957,7 @@ async function openDetail(itemId){
   }
 
   body.innerHTML = `
+    ${verstorbenHtml}
     ${apHtml}
     ${ehepartnerHtml}
     ${kinderHtml}
