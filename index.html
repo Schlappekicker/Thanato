@@ -850,6 +850,19 @@ function extractChildren(sheet, kindRow, apRow){
   return children;
 }
 
+// Wert-Zelle der Fallübersicht: Datumszellen direkt aus der Excel-Seriennummer als TT/MM/JJJJ
+// ausgeben (unabhängig vom hinterlegten Zahlenformat, das hier amerikanisch "mm-dd-yy" ist).
+function uebersichtWert(cell){
+  if(!cell || cell.v === undefined || cell.v === null) return '';
+  let d = null;
+  if(cell.t === 'd') d = new Date(cell.v);
+  else if(cell.t === 'n' && cell.v > 20000 && cell.v < 80000 && cell.z && /[dmy]/i.test(cell.z)) d = excelSerialToDate(cell.v);
+  if(d && !isNaN(d)){
+    return String(d.getUTCDate()).padStart(2,'0') + '/' + String(d.getUTCMonth()+1).padStart(2,'0') + '/' + d.getUTCFullYear();
+  }
+  return formatCell(cell);
+}
+
 // ====== FALLÜBERSICHT AUSLESEN ======
 // Block rechts oben im Fragebogen: Überschrift "Fallübersicht ...", darunter Zeilen mit
 // Beschriftung | Status (✓ erledigt / ○ offen) | Wert (z.B. Datum). Abschnittsüberschriften haben keinen Status.
@@ -882,7 +895,7 @@ function extractFallUebersicht(sheet){
     aktuell.items.push({
       label,
       status: status === '✓' ? 'ok' : (status === '○' ? 'offen' : 'unklar'),
-      wert: formatCell(sheet[XLSX.utils.encode_cell({ r, c: c0 + 2 })])
+      wert: uebersichtWert(sheet[XLSX.utils.encode_cell({ r, c: c0 + 2 })])
     });
   }
   const alle = abschnitte.flatMap(a => a.items);
@@ -1116,8 +1129,8 @@ function selectTab(name, btnEl){
 // Archiv-Jahre und Vorsorgen ändern sich praktisch nie -> einmal lesen, dann merken.
 // Der aktuelle Jahresordner wird immer per Änderungsdatum abgeglichen.
 // v2: Kinder-Erkennung korrigiert (Ehepartner stand fälschlich unter Kinder) -> alten Zwischenspeicher verwerfen
-const CACHE_KEY = 'thanato_cache_v5';
-try{ ['thanato_cache_v1','thanato_cache_v2','thanato_cache_v3','thanato_cache_v4'].forEach(k => localStorage.removeItem(k)); }catch(e){}
+const CACHE_KEY = 'thanato_cache_v6';
+try{ ['thanato_cache_v1','thanato_cache_v2','thanato_cache_v3','thanato_cache_v4','thanato_cache_v5'].forEach(k => localStorage.removeItem(k)); }catch(e){}
 function loadDiskCache(){
   try{ return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }catch(e){ return {}; }
 }
@@ -1647,6 +1660,7 @@ function openUebersicht(itemId){
         </div>
       `).join('')}
     `).join('')}
+    <div style="text-align:center;font-size:10.5px;color:var(--grau);margin-top:14px;">App-Stand: 06.11.2026 · Datumsformat TT/MM/JJJJ</div>
   `;
   document.getElementById('apOverlay').classList.add('open');
 }
