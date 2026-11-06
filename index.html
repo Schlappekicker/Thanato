@@ -1613,6 +1613,12 @@ function openAnsprechpartner(itemId){
   }, 'person-' + itemId + '-ansprechpartner');
 }
 
+// Fallübersicht zeigt Datumsangaben als TT/MM/JJJJ (z.B. 02/11/2026)
+function datumSchraegstrich(text){
+  return String(text).replace(/\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b/g,
+    (m, d, mo, y) => d.padStart(2,'0') + '/' + mo.padStart(2,'0') + '/' + y);
+}
+
 function openUebersicht(itemId){
   const cached = fileCache[itemId];
   if(!cached || !cached.info || !cached.info.uebersicht) return;
@@ -1636,7 +1642,7 @@ function openUebersicht(itemId){
         <div class="doc" style="cursor:default;">
           <div style="display:flex;gap:10px;align-items:flex-start;">
             <div style="width:18px;flex-shrink:0;text-align:center;">${symbol(i.status)}</div>
-            <div><div class="doc-name-alt" style="${i.status==='offen' ? 'color:var(--anthrazit);font-weight:600;' : ''}">${i.label}</div>${i.wert ? `<div class="doc-meta-alt">${i.wert}</div>` : ''}</div>
+            <div><div class="doc-name-alt" style="${i.status==='offen' ? 'color:var(--anthrazit);font-weight:600;' : ''}">${i.label}</div>${i.wert ? `<div class="doc-meta-alt">${datumSchraegstrich(i.wert)}</div>` : ''}</div>
           </div>
         </div>
       `).join('')}
