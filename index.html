@@ -948,7 +948,9 @@ function selectTab(name, btnEl){
 // ====== ZWISCHENSPEICHER (localStorage) ======
 // Archiv-Jahre und Vorsorgen ändern sich praktisch nie -> einmal lesen, dann merken.
 // Der aktuelle Jahresordner wird immer per Änderungsdatum abgeglichen.
-const CACHE_KEY = 'thanato_cache_v1';
+// v2: Kinder-Erkennung korrigiert (Ehepartner stand fälschlich unter Kinder) -> alten Zwischenspeicher verwerfen
+const CACHE_KEY = 'thanato_cache_v2';
+try{ localStorage.removeItem('thanato_cache_v1'); }catch(e){}
 function loadDiskCache(){
   try{ return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; }catch(e){ return {}; }
 }
